@@ -2,9 +2,9 @@
 
 Приватная фабрика репозиториев для аккаунта `lvlaksim1`.
 
-## Как работает
+## Создание репозитория
 
-Создание нового Issue с точным заголовком:
+Создать Issue с точным заголовком:
 
 `[CREATE_REPOSITORY]`
 
@@ -18,25 +18,63 @@
 }
 ```
 
-запускает GitHub Actions workflow, который создаёт новый репозиторий через GitHub REST API.
+Workflow создаёт репозиторий через GitHub REST API.
 
-Команды принимаются только от пользователя `lvlaksim1`.
+После успешного создания фабрика автоматически копирует в новый репозиторий стандартные secrets:
+
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+
+если они настроены в `repo-factory`.
+
+## Синхронизация стандартных secrets
+
+Для уже существующего репозитория создать Issue с заголовком:
+
+`[SYNC_STANDARD_SECRETS]`
+
+и телом:
+
+```json
+{
+  "name": "telegram-receiver"
+}
+```
+
+Фабрика заново устанавливает оба Telegram secrets в целевом репозитории.
+
+## Изменение видимости
+
+Поддерживается команда:
+
+`[SET_REPOSITORY_VISIBILITY]`
+
+с JSON:
+
+```json
+{
+  "name": "telegram-receiver",
+  "visibility": "public"
+}
+```
+
+Допустимые значения: `public` и `private`.
 
 ## Обязательная настройка
 
-В Settings → Secrets and variables → Actions → New repository secret создать:
+В `repo-factory → Settings → Secrets and variables → Actions` должны существовать:
 
-- Name: `REPO_FACTORY_TOKEN`
-- Value: fine-grained PAT владельца `lvlaksim1`
-- Permission: Repository permissions → Administration → Read and write
+- `REPO_FACTORY_TOKEN`
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
 
-Токен используется только внутри GitHub Actions и не хранится в коде.
+Для `REPO_FACTORY_TOKEN` нужны как минимум:
 
-## Ответ фабрики
+- Repository permissions → Administration → Read and write
+- Repository permissions → Secrets → Read and write
 
-Workflow пишет результат в исходный Issue:
+Команды принимаются только от пользователя `lvlaksim1`.
 
-- `CREATED: lvlaksim1/<name>`
-- либо `FAILED: ...`
+Значения secrets не пишутся в код, Issue или комментарии workflow.
 
 Удаление репозиториев фабрика не поддерживает.
