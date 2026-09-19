@@ -1,0 +1,98 @@
+name: Repository Visibility
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  set-visibility:
+    if: github.event.issue.user.login == 'lvlaksim1' && github.event.issue.title == '[SET_REPOSITORY_VISIBILITY]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate and update repository visibility
+        id: update
+        env:
+          FACTORY_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${FACTORY_TOKEN:-}" ]; then
+            echo "status=secret_missing" >> "$GITHUB_OUTPUT"
+            echo "message=REPO_FACTORY_TOKEN is not configured" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          printf '%s' "$ISSUE_BODY" > request.json
+
+          if ! jq -e . request.json >/dev/null 2>&1; then
+            echo "status=invalid" >> "$GITHUB_OUTPUT"
+            echo "message=Issue body must contain valid JSON" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          NAME="$(jq -r '.name // empty' request.json)"
+          VISIBILITY="$(jq -r '.visibility // empty' request.json)"
+
+          if [[ ! "$NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "status=invalid" >> "$GITHUB_OUTPUT"
+            echo "message=Invalid repository name" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$VISIBILITY" != "public" && "$VISIBILITY" != "private" ]]; then
+            echo "status=invalid" >> "$GITHUB_OUTPUT"
+            echo "message=visibility must be public or private" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          jq -n --arg visibility "$VISIBILITY" '{visibility:$visibility}' > payload.json
+
+          HTTP_CODE="$(curl -sS             -o response.json             -w '%{http_code}'             -X PATCH             -H 'Accept: application/vnd.github+json'             -H 'X-GitHub-Api-Version: 2022-11-28'             -H "Authorization: Bearer $FACTORY_TOKEN"             "https://api.github.com/repos/lvlaksim1/$NAME"             -d @payload.json)"
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            FULL_NAME="$(jq -r '.full_name' response.json)"
+            NEW_VISIBILITY="$(jq -r '.visibility' response.json)"
+            echo "status=updated" >> "$GITHUB_OUTPUT"
+            echo "full_name=$FULL_NAME" >> "$GITHUB_OUTPUT"
+            echo "visibility=$NEW_VISIBILITY" >> "$GITHUB_OUTPUT"
+          else
+            ERROR_MESSAGE="$(jq -r '.message // "Unknown GitHub API error"' response.json 2>/dev/null || echo "Unknown GitHub API error")"
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "message=HTTP $HTTP_CODE: $ERROR_MESSAGE" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Report result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          STATUS: ${{ steps.update.outputs.status }}
+          MESSAGE: ${{ steps.update.outputs.message }}
+          FULL_NAME: ${{ steps.update.outputs.full_name }}
+          VISIBILITY: ${{ steps.update.outputs.visibility }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "$STATUS" in
+            updated)
+              BODY="UPDATED: $FULL_NAME visibility=$VISIBILITY"
+              ;;
+            secret_missing)
+              BODY="FAILED: REPO_FACTORY_TOKEN is not configured."
+              ;;
+            invalid)
+              BODY="FAILED: $MESSAGE"
+              ;;
+            *)
+              BODY="FAILED: $MESSAGE"
+              ;;
+          esac
+
+          gh api             --method POST             "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments"             -f body="$BODY"
