@@ -78,3 +78,26 @@ Workflow создаёт репозиторий через GitHub REST API.
 Значения secrets не пишутся в код, Issue или комментарии workflow.
 
 Удаление репозиториев фабрика не поддерживает.
+
+
+## Receiver-specific secret
+
+For Telegram receiver repositories, `repo-factory` also supports a separate explicit command:
+
+`[SYNC_RECEIVER_SECRETS]`
+
+with body:
+
+```json
+{
+  "name": "telegram-receiver"
+}
+```
+
+This copies only:
+
+- `CONSUMER_DISPATCH_TOKEN`
+
+from `repo-factory` to the named receiver repository.
+
+It is intentionally not part of automatic secret propagation to every new repository.
