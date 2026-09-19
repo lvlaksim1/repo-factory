@@ -69,6 +69,35 @@ jobs:
             echo "message=HTTP $HTTP_CODE: $ERROR_MESSAGE" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Copy standard Telegram secrets
+        id: secrets
+        if: steps.create.outputs.status == 'created'
+        env:
+          GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
+          TARGET_REPO: ${{ steps.create.outputs.full_name }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${TELEGRAM_CHAT_ID:-}" ]; then
+            echo "status=not_configured" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! gh secret set TELEGRAM_BOT_TOKEN --repo "$TARGET_REPO" --body "$TELEGRAM_BOT_TOKEN"; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! gh secret set TELEGRAM_CHAT_ID --repo "$TARGET_REPO" --body "$TELEGRAM_CHAT_ID"; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "status=synced" >> "$GITHUB_OUTPUT"
+
       - name: Report result
         env:
           GH_TOKEN: ${{ github.token }}
@@ -77,6 +106,7 @@ jobs:
           MESSAGE: ${{ steps.create.outputs.message }}
           FULL_NAME: ${{ steps.create.outputs.full_name }}
           HTML_URL: ${{ steps.create.outputs.html_url }}
+          SECRETS_STATUS: ${{ steps.secrets.outputs.status }}
         shell: bash
         run: |
           set -euo pipefail
@@ -84,6 +114,17 @@ jobs:
           case "$STATUS" in
             created)
               BODY="CREATED: $FULL_NAME"$'\n'"$HTML_URL"
+              case "$SECRETS_STATUS" in
+                synced)
+                  BODY="$BODY"$'\n'"STANDARD_SECRETS: SYNCED"
+                  ;;
+                not_configured)
+                  BODY="$BODY"$'\n'"STANDARD_SECRETS: NOT_CONFIGURED_IN_FACTORY"
+                  ;;
+                failed)
+                  BODY="$BODY"$'\n'"STANDARD_SECRETS: SYNC_FAILED"
+                  ;;
+              esac
               ;;
             secret_missing)
               BODY="FAILED: REPO_FACTORY_TOKEN is not configured."
