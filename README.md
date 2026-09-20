@@ -20,7 +20,9 @@
 
 Workflow создаёт репозиторий через GitHub REST API.
 
-После успешного создания фабрика автоматически копирует в новый репозиторий стандартные secrets:
+После создания фабрика автоматически выполняет штатный clean install Context Capsule в default branch нового репозитория. Устанавливается пустая структурно валидная Capsule; проектный semantic context заполняется позже в ходе реальной работы.
+
+После успешного создания фабрика также автоматически копирует в новый репозиторий стандартные secrets:
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
@@ -71,6 +73,7 @@ Workflow создаёт репозиторий через GitHub REST API.
 Для `REPO_FACTORY_TOKEN` нужны как минимум:
 
 - Repository permissions → Administration → Read and write
+- Repository permissions → Contents → Read and write
 - Repository permissions → Secrets → Read and write
 
 Команды принимаются только от пользователя `lvlaksim1`.

@@ -69,6 +69,36 @@ jobs:
             echo "message=HTTP $HTTP_CODE: $ERROR_MESSAGE" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Install Context Capsule
+        id: capsule
+        if: steps.create.outputs.status == 'created'
+        env:
+          GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
+          TARGET_REPO: ${{ steps.create.outputs.full_name }}
+          CONTEXT_CAPSULE_CORE_COMMIT: 4145f845379903b9515103cee3ae93c7a0e22afa
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          WORK_DIR="$(mktemp -d)"
+          trap 'rm -rf "$WORK_DIR"' EXIT
+
+          git clone --quiet https://github.com/lvlaksim1/context-capsule.git "$WORK_DIR/context-capsule"
+          git -C "$WORK_DIR/context-capsule" checkout --quiet --detach "$CONTEXT_CAPSULE_CORE_COMMIT"
+
+          gh auth setup-git >/dev/null
+          gh repo clone "$TARGET_REPO" "$WORK_DIR/target" -- --depth=1 >/dev/null
+
+          TARGET_BRANCH="$(git -C "$WORK_DIR/target" branch --show-current)"
+
+          python "$WORK_DIR/context-capsule/installer/capsulectl.py" install             --target "$WORK_DIR/target"             --repository "$TARGET_REPO"             --branch "$TARGET_BRANCH"             --core-commit "$CONTEXT_CAPSULE_CORE_COMMIT"
+
+          git -C "$WORK_DIR/target" config user.name "repo-factory"
+          git -C "$WORK_DIR/target" config user.email "repo-factory@users.noreply.github.com"
+          git -C "$WORK_DIR/target" add -A
+          git -C "$WORK_DIR/target" commit --quiet -m "Install Context Capsule"
+          git -C "$WORK_DIR/target" push --quiet origin "HEAD:$TARGET_BRANCH"
+
       - name: Copy standard Telegram secrets
         id: secrets
         if: steps.create.outputs.status == 'created'
@@ -99,6 +129,7 @@ jobs:
           echo "status=synced" >> "$GITHUB_OUTPUT"
 
       - name: Report result
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
@@ -106,6 +137,7 @@ jobs:
           MESSAGE: ${{ steps.create.outputs.message }}
           FULL_NAME: ${{ steps.create.outputs.full_name }}
           HTML_URL: ${{ steps.create.outputs.html_url }}
+          CAPSULE_OUTCOME: ${{ steps.capsule.outcome }}
           SECRETS_STATUS: ${{ steps.secrets.outputs.status }}
         shell: bash
         run: |
@@ -114,6 +146,11 @@ jobs:
           case "$STATUS" in
             created)
               BODY="CREATED: $FULL_NAME"$'\n'"$HTML_URL"
+              if [ "$CAPSULE_OUTCOME" = "success" ]; then
+                BODY="$BODY"$'\n'"CONTEXT_CAPSULE: INSTALLED"
+              else
+                BODY="$BODY"$'\n'"CONTEXT_CAPSULE: FAILED"
+              fi
               case "$SECRETS_STATUS" in
                 synced)
                   BODY="$BODY"$'\n'"STANDARD_SECRETS: SYNCED"
