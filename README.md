@@ -8,7 +8,7 @@
 
 `[CREATE_REPOSITORY]`
 
-Профиль теперь **обязателен**. Старый Context Capsule bootstrap удалён из текущей фабрики.
+Профиль **обязателен**.
 
 ### Репозиторий проекта с Project Manager v2
 
@@ -48,14 +48,12 @@
 
 ## Context Capsule policy
 
-`repo-factory` больше не содержит и не использует старый Context Capsule Core.
-
 Оба поддерживаемых профиля устанавливаются из одного закреплённого актуального v2 Core:
 
 - `project-manager` → `capsulectl.py install`
 - `service-agent` → `capsulectl.py service-install`
 
-Поле `profile` обязательно; неявного legacy/default bootstrap нет.
+Поле `profile` обязательно; профиль установки всегда задаётся явно.
 
 ## Стандартные Telegram secrets
 
