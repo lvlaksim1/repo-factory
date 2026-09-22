@@ -8,21 +8,22 @@
 
 `[CREATE_REPOSITORY]`
 
-и JSON в теле:
+Профиль теперь **обязателен**. Старый Context Capsule bootstrap удалён из текущей фабрики.
+
+### Репозиторий проекта с Project Manager v2
 
 ```json
 {
-  "name": "telegram-receiver",
+  "name": "my-project",
   "private": true,
-  "description": "Reliable Telegram receiver"
+  "description": "Project repository",
+  "profile": "project-manager"
 }
 ```
 
-Workflow создаёт репозиторий через GitHub REST API.
+Фабрика создаёт репозиторий и выполняет clean install актуального Project Manager v2 из закреплённого Context Capsule Core.
 
-По умолчанию фабрика сохраняет прежнее поведение: выполняет штатный clean install Project Manager Context Capsule в default branch нового репозитория.
-
-Для репозиториев постоянных сервисных агентов поддерживается профиль `service-agent`:
+### Репозиторий Service Agent
 
 ```json
 {
@@ -37,16 +38,41 @@ Workflow создаёт репозиторий через GitHub REST API.
 }
 ```
 
-Для `service-agent` обязательны `agent_id`, `role` и `specialization`. Фабрика устанавливает Minimal Service Agent Base из закреплённого Core commit. Старые вызовы без `profile` продолжают использовать прежний Project Manager bootstrap.
+Для `service-agent` обязательны:
 
-Поле `standard_secrets` опционально и по умолчанию равно `true`. Для сервисных агентов, которым Telegram secrets не нужны, его следует явно устанавливать в `false`.
+- `agent_id`
+- `role`
+- `specialization`
 
-После успешного создания фабрика при разрешённом `standard_secrets` также автоматически копирует в новый репозиторий стандартные secrets:
+Фабрика выполняет clean install Minimal Service Agent Base.
+
+## Context Capsule policy
+
+`repo-factory` больше не содержит и не использует старый Context Capsule Core.
+
+Оба поддерживаемых профиля устанавливаются из одного закреплённого актуального v2 Core:
+
+- `project-manager` → `capsulectl.py install`
+- `service-agent` → `capsulectl.py service-install`
+
+Поле `profile` обязательно; неявного legacy/default bootstrap нет.
+
+## Стандартные Telegram secrets
+
+Поле `standard_secrets` опционально и по умолчанию равно `true`.
+
+Если оно разрешено и secrets настроены в `repo-factory`, в новый репозиторий копируются:
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 
-если они настроены в `repo-factory`.
+Для сервисных агентов, которым они не нужны, следует явно использовать:
+
+```json
+{
+  "standard_secrets": false
+}
+```
 
 ## Синхронизация стандартных secrets
 
@@ -62,15 +88,43 @@ Workflow создаёт репозиторий через GitHub REST API.
 }
 ```
 
-Фабрика заново устанавливает оба Telegram secrets в целевом репозитории.
+## Удаление стандартных secrets
+
+Используется Issue:
+
+`[REMOVE_STANDARD_SECRETS]`
+
+с телом:
+
+```json
+{
+  "name": "telegram-receiver"
+}
+```
+
+## Receiver-specific secret
+
+Для Telegram receiver поддерживается отдельная команда:
+
+`[SYNC_RECEIVER_SECRETS]`
+
+с телом:
+
+```json
+{
+  "name": "telegram-receiver"
+}
+```
+
+Она копирует только `CONSUMER_DISPATCH_TOKEN`.
 
 ## Изменение видимости
 
-Поддерживается команда:
+Используется Issue:
 
 `[SET_REPOSITORY_VISIBILITY]`
 
-с JSON:
+с телом:
 
 ```json
 {
@@ -83,11 +137,15 @@ Workflow создаёт репозиторий через GitHub REST API.
 
 ## Обязательная настройка
 
-В `repo-factory → Settings → Secrets and variables → Actions` должны существовать:
+В `repo-factory → Settings → Secrets and variables → Actions` должен существовать:
 
 - `REPO_FACTORY_TOKEN`
+
+Telegram-related secrets нужны только для соответствующих secret-sync функций:
+
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
+- `CONSUMER_DISPATCH_TOKEN`
 
 Для `REPO_FACTORY_TOKEN` нужны как минимум:
 
@@ -100,26 +158,3 @@ Workflow создаёт репозиторий через GitHub REST API.
 Значения secrets не пишутся в код, Issue или комментарии workflow.
 
 Удаление репозиториев фабрика не поддерживает.
-
-
-## Receiver-specific secret
-
-For Telegram receiver repositories, `repo-factory` also supports a separate explicit command:
-
-`[SYNC_RECEIVER_SECRETS]`
-
-with body:
-
-```json
-{
-  "name": "telegram-receiver"
-}
-```
-
-This copies only:
-
-- `CONSUMER_DISPATCH_TOKEN`
-
-from `repo-factory` to the named receiver repository.
-
-It is intentionally not part of automatic secret propagation to every new repository.

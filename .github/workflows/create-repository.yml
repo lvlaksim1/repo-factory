@@ -40,7 +40,7 @@ jobs:
           NAME="$(jq -r '.name // empty' request.json)"
           PRIVATE="$(jq -r 'if has("private") then .private else true end' request.json)"
           DESCRIPTION="$(jq -r '.description // ""' request.json)"
-          PROFILE="$(jq -r '.profile // "project-manager"' request.json)"
+          PROFILE="$(jq -r '.profile // empty' request.json)"
           STANDARD_SECRETS="$(jq -r 'if has("standard_secrets") then .standard_secrets else true end' request.json)"
           AGENT_ID="$(jq -r '.agent_id // empty' request.json)"
           ROLE="$(jq -r '.role // empty' request.json)"
@@ -60,7 +60,7 @@ jobs:
 
           if [[ "$PROFILE" != "project-manager" && "$PROFILE" != "service-agent" ]]; then
             echo "status=invalid" >> "$GITHUB_OUTPUT"
-            echo "message=Field profile must be project-manager or service-agent" >> "$GITHUB_OUTPUT"
+            echo "message=Field profile is required and must be project-manager or service-agent" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -122,8 +122,7 @@ jobs:
           GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
           TARGET_REPO: ${{ steps.create.outputs.full_name }}
           ISSUE_BODY: ${{ github.event.issue.body }}
-          PROJECT_MANAGER_CORE_COMMIT: 4145f845379903b9515103cee3ae93c7a0e22afa
-          SERVICE_AGENT_CORE_COMMIT: 67772ccd376a54e44236035ae6593fe2658e99fc
+          CONTEXT_CAPSULE_CORE_COMMIT: 67772ccd376a54e44236035ae6593fe2658e99fc
         shell: bash
         run: |
           set -euo pipefail
@@ -132,13 +131,8 @@ jobs:
           trap 'rm -rf "$WORK_DIR"' EXIT
 
           printf '%s' "$ISSUE_BODY" > "$WORK_DIR/request.json"
-          PROFILE="$(jq -r '.profile // "project-manager"' "$WORK_DIR/request.json")"
-
-          if [ "$PROFILE" = "service-agent" ]; then
-            CORE_COMMIT="$SERVICE_AGENT_CORE_COMMIT"
-          else
-            CORE_COMMIT="$PROJECT_MANAGER_CORE_COMMIT"
-          fi
+          PROFILE="$(jq -r '.profile' "$WORK_DIR/request.json")"
+          CORE_COMMIT="$CONTEXT_CAPSULE_CORE_COMMIT"
 
           git clone --quiet https://github.com/lvlaksim1/context-capsule.git "$WORK_DIR/context-capsule"
           git -C "$WORK_DIR/context-capsule" checkout --quiet --detach "$CORE_COMMIT"
@@ -168,7 +162,7 @@ jobs:
               --repository "$TARGET_REPO" \
               --branch "$TARGET_BRANCH" \
               --core-commit "$CORE_COMMIT"
-            COMMIT_MESSAGE="Install Context Capsule"
+            COMMIT_MESSAGE="Install Project Manager v2"
           fi
 
           git -C "$WORK_DIR/target" config user.name "repo-factory"
