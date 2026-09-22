@@ -38,7 +38,8 @@ jobs:
 
           SOURCE_HEAD="$(git -C "$WORK_DIR/source" rev-parse HEAD)"
 
-          rsync -a --delete --exclude='.git/' "$WORK_DIR/source/" "$WORK_DIR/target/"
+          rsync -a --delete --exclude='.git/' --exclude='.github/workflows/' "$WORK_DIR/source/" "$WORK_DIR/target/"
+          rm -rf "$WORK_DIR/target/.github/workflows"
 
           git -C "$WORK_DIR/target" config user.name "repo-factory"
           git -C "$WORK_DIR/target" config user.email "repo-factory@users.noreply.github.com"
