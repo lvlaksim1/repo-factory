@@ -40,6 +40,11 @@ jobs:
           NAME="$(jq -r '.name // empty' request.json)"
           PRIVATE="$(jq -r 'if has("private") then .private else true end' request.json)"
           DESCRIPTION="$(jq -r '.description // ""' request.json)"
+          PROFILE="$(jq -r '.profile // "project-manager"' request.json)"
+          STANDARD_SECRETS="$(jq -r 'if has("standard_secrets") then .standard_secrets else true end' request.json)"
+          AGENT_ID="$(jq -r '.agent_id // empty' request.json)"
+          ROLE="$(jq -r '.role // empty' request.json)"
+          SPECIALIZATION="$(jq -r '.specialization // empty' request.json)"
 
           if [[ ! "$NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
             echo "status=invalid" >> "$GITHUB_OUTPUT"
@@ -53,9 +58,50 @@ jobs:
             exit 0
           fi
 
-          jq -n             --arg name "$NAME"             --arg description "$DESCRIPTION"             --argjson private "$PRIVATE"             '{name:$name, description:$description, private:$private, auto_init:true}'             > payload.json
+          if [[ "$PROFILE" != "project-manager" && "$PROFILE" != "service-agent" ]]; then
+            echo "status=invalid" >> "$GITHUB_OUTPUT"
+            echo "message=Field profile must be project-manager or service-agent" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-          HTTP_CODE="$(curl -sS             -o response.json             -w '%{http_code}'             -X POST             -H 'Accept: application/vnd.github+json'             -H 'X-GitHub-Api-Version: 2022-11-28'             -H "Authorization: Bearer $FACTORY_TOKEN"             https://api.github.com/user/repos             -d @payload.json)"
+          if [[ "$STANDARD_SECRETS" != "true" && "$STANDARD_SECRETS" != "false" ]]; then
+            echo "status=invalid" >> "$GITHUB_OUTPUT"
+            echo "message=Field standard_secrets must be true or false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$PROFILE" = "service-agent" ]]; then
+            if [[ ! "$AGENT_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$ ]]; then
+              echo "status=invalid" >> "$GITHUB_OUTPUT"
+              echo "message=service-agent profile requires a valid agent_id" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if [ -z "$ROLE" ] || [ -z "$SPECIALIZATION" ]; then
+              echo "status=invalid" >> "$GITHUB_OUTPUT"
+              echo "message=service-agent profile requires non-empty role and specialization" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+          echo "profile=$PROFILE" >> "$GITHUB_OUTPUT"
+          echo "standard_secrets=$STANDARD_SECRETS" >> "$GITHUB_OUTPUT"
+
+          jq -n \
+            --arg name "$NAME" \
+            --arg description "$DESCRIPTION" \
+            --argjson private "$PRIVATE" \
+            '{name:$name, description:$description, private:$private, auto_init:true}' \
+            > payload.json
+
+          HTTP_CODE="$(curl -sS \
+            -o response.json \
+            -w '%{http_code}' \
+            -X POST \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            -H "Authorization: Bearer $FACTORY_TOKEN" \
+            https://api.github.com/user/repos \
+            -d @payload.json)"
 
           if [ "$HTTP_CODE" = "201" ]; then
             FULL_NAME="$(jq -r '.full_name' response.json)"
@@ -69,13 +115,15 @@ jobs:
             echo "message=HTTP $HTTP_CODE: $ERROR_MESSAGE" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Install Context Capsule
+      - name: Install Context Capsule profile
         id: capsule
         if: steps.create.outputs.status == 'created'
         env:
           GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
           TARGET_REPO: ${{ steps.create.outputs.full_name }}
-          CONTEXT_CAPSULE_CORE_COMMIT: 4145f845379903b9515103cee3ae93c7a0e22afa
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          PROJECT_MANAGER_CORE_COMMIT: 4145f845379903b9515103cee3ae93c7a0e22afa
+          SERVICE_AGENT_CORE_COMMIT: 67772ccd376a54e44236035ae6593fe2658e99fc
         shell: bash
         run: |
           set -euo pipefail
@@ -83,25 +131,55 @@ jobs:
           WORK_DIR="$(mktemp -d)"
           trap 'rm -rf "$WORK_DIR"' EXIT
 
+          printf '%s' "$ISSUE_BODY" > "$WORK_DIR/request.json"
+          PROFILE="$(jq -r '.profile // "project-manager"' "$WORK_DIR/request.json")"
+
+          if [ "$PROFILE" = "service-agent" ]; then
+            CORE_COMMIT="$SERVICE_AGENT_CORE_COMMIT"
+          else
+            CORE_COMMIT="$PROJECT_MANAGER_CORE_COMMIT"
+          fi
+
           git clone --quiet https://github.com/lvlaksim1/context-capsule.git "$WORK_DIR/context-capsule"
-          git -C "$WORK_DIR/context-capsule" checkout --quiet --detach "$CONTEXT_CAPSULE_CORE_COMMIT"
+          git -C "$WORK_DIR/context-capsule" checkout --quiet --detach "$CORE_COMMIT"
 
           gh auth setup-git >/dev/null
           gh repo clone "$TARGET_REPO" "$WORK_DIR/target" -- --depth=1 >/dev/null
 
           TARGET_BRANCH="$(git -C "$WORK_DIR/target" branch --show-current)"
 
-          python "$WORK_DIR/context-capsule/installer/capsulectl.py" install             --target "$WORK_DIR/target"             --repository "$TARGET_REPO"             --branch "$TARGET_BRANCH"             --core-commit "$CONTEXT_CAPSULE_CORE_COMMIT"
+          if [ "$PROFILE" = "service-agent" ]; then
+            AGENT_ID="$(jq -r '.agent_id' "$WORK_DIR/request.json")"
+            ROLE="$(jq -r '.role' "$WORK_DIR/request.json")"
+            SPECIALIZATION="$(jq -r '.specialization' "$WORK_DIR/request.json")"
+
+            python "$WORK_DIR/context-capsule/installer/capsulectl.py" service-install \
+              --target "$WORK_DIR/target" \
+              --repository "$TARGET_REPO" \
+              --branch "$TARGET_BRANCH" \
+              --agent-id "$AGENT_ID" \
+              --role "$ROLE" \
+              --specialization "$SPECIALIZATION" \
+              --core-commit "$CORE_COMMIT"
+            COMMIT_MESSAGE="Install Service Agent Base"
+          else
+            python "$WORK_DIR/context-capsule/installer/capsulectl.py" install \
+              --target "$WORK_DIR/target" \
+              --repository "$TARGET_REPO" \
+              --branch "$TARGET_BRANCH" \
+              --core-commit "$CORE_COMMIT"
+            COMMIT_MESSAGE="Install Context Capsule"
+          fi
 
           git -C "$WORK_DIR/target" config user.name "repo-factory"
           git -C "$WORK_DIR/target" config user.email "repo-factory@users.noreply.github.com"
           git -C "$WORK_DIR/target" add -A
-          git -C "$WORK_DIR/target" commit --quiet -m "Install Context Capsule"
+          git -C "$WORK_DIR/target" commit --quiet -m "$COMMIT_MESSAGE"
           git -C "$WORK_DIR/target" push --quiet origin "HEAD:$TARGET_BRANCH"
 
       - name: Copy standard Telegram secrets
         id: secrets
-        if: steps.create.outputs.status == 'created'
+        if: steps.create.outputs.status == 'created' && steps.create.outputs.standard_secrets == 'true'
         env:
           GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
           TARGET_REPO: ${{ steps.create.outputs.full_name }}
@@ -137,6 +215,8 @@ jobs:
           MESSAGE: ${{ steps.create.outputs.message }}
           FULL_NAME: ${{ steps.create.outputs.full_name }}
           HTML_URL: ${{ steps.create.outputs.html_url }}
+          PROFILE: ${{ steps.create.outputs.profile }}
+          STANDARD_SECRETS: ${{ steps.create.outputs.standard_secrets }}
           CAPSULE_OUTCOME: ${{ steps.capsule.outcome }}
           SECRETS_STATUS: ${{ steps.secrets.outputs.status }}
         shell: bash
@@ -146,22 +226,31 @@ jobs:
           case "$STATUS" in
             created)
               BODY="CREATED: $FULL_NAME"$'\n'"$HTML_URL"
+              BODY="$BODY"$'\n'"CONTEXT_CAPSULE_PROFILE: $PROFILE"
               if [ "$CAPSULE_OUTCOME" = "success" ]; then
                 BODY="$BODY"$'\n'"CONTEXT_CAPSULE: INSTALLED"
               else
                 BODY="$BODY"$'\n'"CONTEXT_CAPSULE: FAILED"
               fi
-              case "$SECRETS_STATUS" in
-                synced)
-                  BODY="$BODY"$'\n'"STANDARD_SECRETS: SYNCED"
-                  ;;
-                not_configured)
-                  BODY="$BODY"$'\n'"STANDARD_SECRETS: NOT_CONFIGURED_IN_FACTORY"
-                  ;;
-                failed)
-                  BODY="$BODY"$'\n'"STANDARD_SECRETS: SYNC_FAILED"
-                  ;;
-              esac
+
+              if [ "$STANDARD_SECRETS" = "false" ]; then
+                BODY="$BODY"$'\n'"STANDARD_SECRETS: SKIPPED_BY_REQUEST"
+              else
+                case "$SECRETS_STATUS" in
+                  synced)
+                    BODY="$BODY"$'\n'"STANDARD_SECRETS: SYNCED"
+                    ;;
+                  not_configured)
+                    BODY="$BODY"$'\n'"STANDARD_SECRETS: NOT_CONFIGURED_IN_FACTORY"
+                    ;;
+                  failed)
+                    BODY="$BODY"$'\n'"STANDARD_SECRETS: SYNC_FAILED"
+                    ;;
+                  *)
+                    BODY="$BODY"$'\n'"STANDARD_SECRETS: UNKNOWN"
+                    ;;
+                esac
+              fi
               ;;
             secret_missing)
               BODY="FAILED: REPO_FACTORY_TOKEN is not configured."
@@ -174,4 +263,7 @@ jobs:
               ;;
           esac
 
-          gh api             --method POST             "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments"             -f body="$BODY"
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" \
+            -f body="$BODY"
