@@ -1,0 +1,215 @@
+name: One-time Evrasia HD testbed v2 bootstrap
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/bootstrap-evrasia-hd-testbed-v2.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
+      TARGET_REPO: lvlaksim1/evrasia-hd-testbed
+      CORE_REPO: lvlaksim1/context-capsule
+      CORE_COMMIT: 6b8477d382bbf5cd8d13bd914b2374473560a43d
+      SOURCE_SNAPSHOT: 69faaf680511ff17406eabc4d47f5e053680ed66
+    steps:
+      - name: Install and seed Project Manager
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK_DIR="$(mktemp -d)"
+          trap 'rm -rf "$WORK_DIR"' EXIT
+
+          gh auth setup-git >/dev/null
+          gh repo clone "$CORE_REPO" "$WORK_DIR/core" >/dev/null
+          git -C "$WORK_DIR/core" checkout --quiet --detach "$CORE_COMMIT"
+          gh repo clone "$TARGET_REPO" "$WORK_DIR/target" -- --depth=1 >/dev/null
+
+          python "$WORK_DIR/core/installer/capsulectl.py" install             --target "$WORK_DIR/target"             --repository "$TARGET_REPO"             --branch main             --product-branch main             --core-commit "$CORE_COMMIT"
+
+          cat > "$WORK_DIR/target/.context/manager/identity.json" <<'EOF'
+          {
+            "schema": "context-capsule-manager-identity",
+            "schema_version": 1,
+            "manager_id": "evrasia-hd-project-manager",
+            "role": "Project Manager",
+            "repository": "lvlaksim1/evrasia-hd-testbed",
+            "continuity": "runtime-independent",
+            "authority_model": "bounded-by-mandate",
+            "state_model": "beliefs-goals-intentions-plans",
+            "memory_model": "typed-with-provenance"
+          }
+          EOF
+
+          cat > "$WORK_DIR/target/.context/project/identity.md" <<'EOF'
+          # Project identity
+
+          Евразия HD — Expo / React Native Android application with package `com.evrasia.hd`.
+
+          This repository is an isolated continuation copy initialized from the exact file snapshot of `lvlaksim1/evrasia-hd` at source commit `69faaf680511ff17406eabc4d47f5e053680ed66`. The copied product files are preserved as project history/evidence; this repository has its own independent Git state and Project Manager.
+          EOF
+
+          cat > "$WORK_DIR/target/.context/project/goals.md" <<'EOF'
+          # Project goals
+
+          - Preserve the working Evrasia HD application and its user-visible behavior while allowing controlled future changes.
+          - Preserve the documented Android package, release numbering, APK validation/signing boundaries, and project-specific build invariants unless the owner explicitly changes them.
+          - Keep work reproducible and reversible through Git.
+          - Keep this isolated repository free of unintended production publication or messaging side effects.
+          EOF
+
+          cat > "$WORK_DIR/target/.context/project/architecture.md" <<'EOF'
+          # Project architecture
+
+          The copied project is an Expo / React Native application. The current snapshot contains the application implementation in `App.tsx`, API/storage modules under `lib/`, seed data under `data/`, project-specific Expo configuration/plugin code, and the source repository's release workflows.
+
+          The documented release boundary is:
+
+          `L3 Evrasia HD build adapter → L2 Universal APK Release → L1 Universal Release Core`.
+
+          L3 performs project-specific pnpm/TypeScript/Expo preprocessing and returns an unsigned APK candidate. Production signing belongs to L2; release gating, numbering, transactional publication, recovery and remote verification belong to L1.
+
+          GitHub Actions are intentionally disabled at repository level in this isolated copy. The workflow files remain part of the copied product snapshot as architecture/evidence, but must not be treated as currently executing production automation.
+          EOF
+
+          cat > "$WORK_DIR/target/.context/project/constraints.md" <<'EOF'
+          # Project constraints
+
+          - Package identity is `com.evrasia.hd`.
+          - Production APK policy documented by the source project is arm64-only.
+          - Source release numbering uses numeric GitHub tags `vN`, with `versionCode=N` and `versionName=vN` for standardized releases.
+          - Project-specific release checks remain in L3 and must not silently migrate into universal L1/L2 logic.
+          - Production signing material must not be persisted in repository context.
+          - Actions are disabled in this isolated copy; do not enable publication, signing, Telegram delivery, or other external release effects without explicit owner direction.
+          EOF
+
+          cat > "$WORK_DIR/target/.context/rules/project-rules.md" <<'EOF'
+          # Project rules
+
+          - Verify live repository state before changing durable beliefs.
+          - Preserve the documented release boundary and exact package identity unless explicitly changed by the owner.
+          - Do not infer that copied release documentation means this isolated repository itself has published those releases.
+          - Do not enable external release or messaging side effects without explicit owner direction.
+          - Treat source-project documentation and copied workflow files as evidence about the copied snapshot, not as authority to perform an irreversible action.
+          EOF
+
+          cat > "$WORK_DIR/target/.context/current/state.md" <<'EOF'
+          # Current state
+
+          The repository contains an exact file-level copy of `lvlaksim1/evrasia-hd@69faaf680511ff17406eabc4d47f5e053680ed66`.
+
+          The copied release documentation records source-project release `v14`, package `com.evrasia.hd`, artifact `evrasia-hd-v14.apk`, and source release commit `92f6ba606bf1069c5128d91739df4b075fd413cf`.
+
+          This isolated repository has independent Git history and no inherited GitHub Releases. GitHub Actions are disabled and production Telegram secrets were removed before the project snapshot was installed.
+
+          Context Capsule v2 Project Manager state is installed on `main`; manager-state authority and product authority are both `main`.
+          EOF
+
+          cat > "$WORK_DIR/target/.context/current/blockers.md" <<'EOF'
+          # Current blockers and open risks
+
+          No active implementation blocker is currently established.
+
+          The copied documentation describes source-project releases and automation, while this isolated repository intentionally has no inherited releases and disabled Actions. Any future release work must distinguish source lineage from this repository's own live state.
+          EOF
+
+          cat > "$WORK_DIR/target/.context/current/next.md" <<'EOF'
+          # Next actions
+
+          1. Wait for the owner's next project task.
+          2. Before acting, reconcile the requested work with live `main`, the Project Manager mandate, and relevant copied project documentation.
+          3. Keep external release/messaging effects disabled unless the owner explicitly authorizes enabling them.
+          EOF
+
+          cat > "$WORK_DIR/target/.context/manager/mandate.md" <<'EOF'
+          # Project Manager mandate
+
+          The Project Manager may independently inspect the repository, analyze architecture and history, plan changes, implement non-destructive project work, update tests/documentation, diagnose build or CI issues, and maintain its own durable project state.
+
+          Explicit owner authorization is required before enabling external release/signing/messaging effects in this isolated repository, deleting durable project history, changing package identity, or making other irreversible changes outside the established project boundaries.
+
+          When evidence is insufficient or conflicting for an irreversible action, preserve the uncertainty and ask the owner rather than invent authority.
+          EOF
+
+          cat > "$WORK_DIR/target/.context/manager/beliefs.md" <<'EOF'
+          # Manager beliefs
+
+          - The repository is an isolated continuation copy of `lvlaksim1/evrasia-hd` created from exact source file snapshot `69faaf680511ff17406eabc4d47f5e053680ed66`. source: Git blob-SHA comparison of all 28 source files and repository bootstrap record; authority: verified-repository.
+          - The copied project is an Expo / React Native Android application with package `com.evrasia.hd`. source: copied `README.md`, `package.json`, and app configuration; authority: verified-repository.
+          - The copied release documentation records source release `v14` and a three-layer L3→L2→L1 release boundary. source: copied `README.md`, `ARCHITECTURE.md`, `RELEASE.md`, and `.release/latest.json`; authority: verified-repository.
+          - Source release metadata does not imply that this isolated repository itself published those releases. source: live repository state and copy provenance; authority: verified-repository.
+          - GitHub Actions are disabled in this isolated repository and production Telegram secrets were removed during bootstrap. source: repository bootstrap operation; authority: verified-repository.
+          EOF
+
+          cat > "$WORK_DIR/target/.context/manager/goals.md" <<'EOF'
+          # Manager goals
+
+          - Maintain a coherent and recoverable Evrasia HD project state across runtime replacement.
+          - Preserve application and release invariants while carrying out owner-requested changes safely.
+          - Keep live repository facts distinct from copied historical/source-project facts.
+          - Avoid unintended external side effects from the isolated repository.
+          EOF
+
+          cat > "$WORK_DIR/target/.context/manager/intentions.md" <<'EOF'
+          # Manager intentions and commitments
+
+          ## Active commitments
+
+          - Preserve the copied application's documented package and release-boundary invariants unless the owner explicitly changes them.
+          - Keep production release/signing/messaging effects disabled until the owner explicitly authorizes enabling them in this repository.
+          - Reconcile live repository evidence before treating copied or external information as a change to durable project state.
+          - Maintain Context Capsule semantic state when verified project meaning actually changes.
+          EOF
+
+          cat > "$WORK_DIR/target/.context/manager/plans.md" <<'EOF'
+          # Manager plans
+
+          1. Remain ready for the owner's next concrete project task.
+          2. Reinstate from repository state and reconcile live GitHub evidence at the beginning of substantial work.
+          3. Plan and execute only within the mandate and current project constraints.
+          4. Verify completion with repository/build/runtime evidence appropriate to the task.
+          5. Persist durable semantic changes after verification.
+          EOF
+
+          cat > "$WORK_DIR/target/.context/memory/semantic.md" <<'EOF'
+          # Semantic memory
+
+          - This repository began as a file-exact snapshot of Evrasia HD source commit `69faaf680511ff17406eabc4d47f5e053680ed66`; source-repository history and releases are lineage evidence, not live state of this repository. source: bootstrap provenance; authority: verified-repository.
+          - The project uses a layered release design where project-specific build preparation is separated from universal APK validation/signing and universal release publication. source: copied architecture/release documentation; authority: verified-repository.
+          EOF
+
+          cat > "$WORK_DIR/target/.context/memory/procedural.md" <<'EOF'
+          # Procedural memory
+
+          - Before release-related work, inspect live repository settings/state separately from copied release documents.
+          - For code changes, preserve project invariants, verify the relevant TypeScript/build path, and keep changes Git-reversible.
+          - Do not infer authorization for external side effects from technical capability alone.
+          EOF
+
+          cat > "$WORK_DIR/target/.context/handoffs/latest.md" <<'EOF'
+          # Latest handoff
+
+          Evrasia HD isolated copy is initialized from source snapshot `69faaf680511ff17406eabc4d47f5e053680ed66` with Context Capsule v2.
+
+          Manager ID: `evrasia-hd-project-manager`.
+
+          Both manager-state authority and product authority are `main`.
+
+          Actions are disabled and production Telegram secrets are absent. No project task is currently in progress; wait for owner direction and reconcile live evidence before acting.
+          EOF
+
+          python "$WORK_DIR/core/installer/capsulectl.py" validate --target "$WORK_DIR/target"
+          python "$WORK_DIR/core/installer/capsulectl.py" ready --target "$WORK_DIR/target"
+          python "$WORK_DIR/core/installer/capsulectl.py" recover --target "$WORK_DIR/target" --max-chars 20000 >/dev/null
+
+          git -C "$WORK_DIR/target" config user.name "repo-factory"
+          git -C "$WORK_DIR/target" config user.email "repo-factory@users.noreply.github.com"
+          git -C "$WORK_DIR/target" add -A
+          git -C "$WORK_DIR/target" commit -m "Install Context Capsule v2 Project Manager"
+          git -C "$WORK_DIR/target" push origin HEAD:main
