@@ -20,9 +20,28 @@
 
 Workflow создаёт репозиторий через GitHub REST API.
 
-После создания фабрика автоматически выполняет штатный clean install Context Capsule в default branch нового репозитория. Устанавливается пустая структурно валидная Capsule; проектный semantic context заполняется позже в ходе реальной работы.
+По умолчанию фабрика сохраняет прежнее поведение: выполняет штатный clean install Project Manager Context Capsule в default branch нового репозитория.
 
-После успешного создания фабрика также автоматически копирует в новый репозиторий стандартные secrets:
+Для репозиториев постоянных сервисных агентов поддерживается профиль `service-agent`:
+
+```json
+{
+  "name": "supervisor",
+  "private": true,
+  "description": "Persistent Supervisor service agent",
+  "profile": "service-agent",
+  "agent_id": "ecosystem-supervisor",
+  "role": "Supervisor",
+  "specialization": "Portfolio and agent-system supervision",
+  "standard_secrets": false
+}
+```
+
+Для `service-agent` обязательны `agent_id`, `role` и `specialization`. Фабрика устанавливает Minimal Service Agent Base из закреплённого Core commit. Старые вызовы без `profile` продолжают использовать прежний Project Manager bootstrap.
+
+Поле `standard_secrets` опционально и по умолчанию равно `true`. Для сервисных агентов, которым Telegram secrets не нужны, его следует явно устанавливать в `false`.
+
+После успешного создания фабрика при разрешённом `standard_secrets` также автоматически копирует в новый репозиторий стандартные secrets:
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
