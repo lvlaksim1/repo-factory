@@ -1,0 +1,58 @@
+name: Validate Supervisor Once
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  validate:
+    if: github.event.issue.user.login == 'lvlaksim1' && github.event.issue.title == '[VALIDATE_SUPERVISOR_ONCE]'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
+      CORE_COMMIT: 7aa1e697504e686b02a4d7f1539a157214d5e692
+    steps:
+      - name: Validate actual private Supervisor
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK_DIR="$(mktemp -d)"
+          trap 'rm -rf "$WORK_DIR"' EXIT
+
+          gh auth setup-git >/dev/null
+          gh repo clone lvlaksim1/supervisor "$WORK_DIR/supervisor" -- --depth=1 >/dev/null
+          git clone --quiet https://github.com/lvlaksim1/context-capsule.git "$WORK_DIR/context-capsule"
+          git -C "$WORK_DIR/context-capsule" checkout --quiet --detach "$CORE_COMMIT"
+
+          python "$WORK_DIR/context-capsule/installer/capsulectl.py" service-validate --target "$WORK_DIR/supervisor"
+          python "$WORK_DIR/context-capsule/installer/capsulectl.py" service-ready --target "$WORK_DIR/supervisor"
+          python "$WORK_DIR/context-capsule/installer/capsulectl.py" service-recover --target "$WORK_DIR/supervisor" --max-chars 50000 > "$WORK_DIR/recovery.txt"
+
+          grep -q "Agent ID: ecosystem-supervisor" "$WORK_DIR/recovery.txt"
+          grep -q "Role: Supervisor" "$WORK_DIR/recovery.txt"
+          grep -q "## PROFILE STATE: .context/supervisor/master-plan.md" "$WORK_DIR/recovery.txt"
+          grep -q "## PROFILE STATE: .context/supervisor/projects.md" "$WORK_DIR/recovery.txt"
+          grep -q "## PROFILE STATE: .context/supervisor/agents.md" "$WORK_DIR/recovery.txt"
+          grep -q "## PROFILE STATE: .context/supervisor/policies.md" "$WORK_DIR/recovery.txt"
+
+          echo "supervisor_head=$(git -C "$WORK_DIR/supervisor" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Report
+        if: always()
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          OUTCOME: ${{ steps.check.outcome }}
+          SUPERVISOR_HEAD: ${{ steps.check.outputs.supervisor_head }}
+        shell: bash
+        run: |
+          if [ "$OUTCOME" = "success" ]; then
+            BODY="SUPERVISOR_VALIDATION: PASS"$'\n'"HEAD: $SUPERVISOR_HEAD"$'\n'"VALID: PASS"$'\n'"READY: PASS"$'\n'"RECOVER: PASS"
+          else
+            BODY="SUPERVISOR_VALIDATION: FAIL"
+          fi
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/$ISSUE_NUMBER/comments" -f body="$BODY"
