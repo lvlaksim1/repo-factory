@@ -122,7 +122,7 @@ jobs:
           GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
           TARGET_REPO: ${{ steps.create.outputs.full_name }}
           ISSUE_BODY: ${{ github.event.issue.body }}
-          CONTEXT_CAPSULE_CORE_COMMIT: 83b63e45416dd61333b79bcf959df7dd3b5fcedc
+          CONTEXT_CAPSULE_CORE_COMMIT: 7aa1e697504e686b02a4d7f1539a157214d5e692
         shell: bash
         run: |
           set -euo pipefail
