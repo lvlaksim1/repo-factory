@@ -46,14 +46,29 @@
 
 Фабрика выполняет clean install Minimal Service Agent Base.
 
+### Инфраструктурный репозиторий без агента
+
+```json
+{
+  "name": "agent-control-plane",
+  "private": true,
+  "description": "Durable control plane for persistent agents",
+  "profile": "infrastructure",
+  "standard_secrets": false
+}
+```
+
+Профиль `infrastructure` создаёт обычный репозиторий без Context Capsule и без агентской идентичности. Он предназначен для общих очередей, реестров, control-plane state и другой инфраструктуры, которая сама не является Project Manager или Service Agent.
+
 ## Context Capsule policy
 
-Оба поддерживаемых профиля устанавливаются из одного закреплённого актуального v2 Core:
+Агентские профили устанавливаются из одного закреплённого актуального v2 Core:
 
 - `project-manager` → `capsulectl.py install`
 - `service-agent` → `capsulectl.py service-install`
+- `infrastructure` → Context Capsule не устанавливается
 
-Поле `profile` обязательно; профиль установки всегда задаётся явно.
+Поле `profile` обязательно; профиль всегда задаётся явно. Инфраструктурный профиль не создаёт ложную agent identity.
 
 ## Стандартные Telegram secrets
 
