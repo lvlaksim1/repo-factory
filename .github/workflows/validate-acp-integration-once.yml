@@ -1,0 +1,49 @@
+name: Validate ACP Integration Once
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+  issues: write
+jobs:
+  validate:
+    if: github.event.issue.user.login == 'lvlaksim1' && github.event.issue.title == '[VALIDATE_ACP_INTEGRATION_ONCE]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone exact snapshot
+        env:
+          GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git >/dev/null
+          gh repo clone lvlaksim1/agent-control-plane target >/dev/null
+          git -C target checkout --detach 5eeeadabbe1d533aa7b518c1b445def5b8701bb8
+          test "$(git -C target rev-parse HEAD)" = "5eeeadabbe1d533aa7b518c1b445def5b8701bb8"
+      - name: Validate repository contracts
+        run: python3 target/tools/control_plane.py validate --root target
+      - name: Run regression suite
+        run: python3 -m unittest discover -s target/tests -v
+      - name: Verify integration queue topology
+        run: |
+          python3 - <<'PY'
+          import json, pathlib
+          r=pathlib.Path("target")
+          reg=json.loads((r/"registry/agents.json").read_text())
+          by={a["agent_id"]:a for a in reg["agents"]}
+          assert by["context-capsule-project-manager"]["automatic_execution_allowed"] is True
+          assert by["project-manager-auditor"]["automatic_execution_allowed"] is True
+          pm=json.loads((r/"tasks/TASK-INT-PM-001/state.json").read_text())
+          au=json.loads((r/"tasks/TASK-INT-AUDITOR-001/state.json").read_text())
+          req=json.loads((r/"tasks/TASK-INT-AUDITOR-001/request.json").read_text())
+          assert pm["status"]=="queued" and au["status"]=="queued"
+          assert req["dependencies"]==[{"task_id":"TASK-INT-PM-001","relation":"depends_on"}]
+          print("ACP_INTEGRATION_QUEUE_VALID")
+          PY
+      - name: Report
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then MSG="ACP_INTEGRATION_VALIDATION_OK"; else MSG="ACP_INTEGRATION_VALIDATION_FAILED"; fi
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" -f body="$MSG"
