@@ -58,9 +58,9 @@ jobs:
             exit 0
           fi
 
-          if [[ "$PROFILE" != "project-manager" && "$PROFILE" != "service-agent" ]]; then
+          if [[ "$PROFILE" != "project-manager" && "$PROFILE" != "service-agent" && "$PROFILE" != "infrastructure" ]]; then
             echo "status=invalid" >> "$GITHUB_OUTPUT"
-            echo "message=Field profile is required and must be project-manager or service-agent" >> "$GITHUB_OUTPUT"
+            echo "message=Field profile is required and must be project-manager, service-agent or infrastructure" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -117,7 +117,7 @@ jobs:
 
       - name: Install Context Capsule profile
         id: capsule
-        if: steps.create.outputs.status == 'created'
+        if: steps.create.outputs.status == 'created' && steps.create.outputs.profile != 'infrastructure'
         env:
           GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
           TARGET_REPO: ${{ steps.create.outputs.full_name }}
@@ -221,10 +221,120 @@ jobs:
             created)
               BODY="CREATED: $FULL_NAME"$'\n'"$HTML_URL"
               BODY="$BODY"$'\n'"CONTEXT_CAPSULE_PROFILE: $PROFILE"
-              if [ "$CAPSULE_OUTCOME" = "success" ]; then
-                BODY="$BODY"$'\n'"CONTEXT_CAPSULE: INSTALLED"
+              if [ "$PROFILE" = "infrastructure" ]; then
+                BODY="$BODY"
+
+              if [ "$STANDARD_SECRETS" = "false" ]; then
+                BODY="$BODY"$'\n'"STANDARD_SECRETS: SKIPPED_BY_REQUEST"
               else
-                BODY="$BODY"$'\n'"CONTEXT_CAPSULE: FAILED"
+                case "$SECRETS_STATUS" in
+                  synced)
+                    BODY="$BODY"$'\n'"STANDARD_SECRETS: SYNCED"
+                    ;;
+                  not_configured)
+                    BODY="$BODY"$'\n'"STANDARD_SECRETS: NOT_CONFIGURED_IN_FACTORY"
+                    ;;
+                  failed)
+                    BODY="$BODY"$'\n'"STANDARD_SECRETS: SYNC_FAILED"
+                    ;;
+                  *)
+                    BODY="$BODY"$'\n'"STANDARD_SECRETS: UNKNOWN"
+                    ;;
+                esac
+              fi
+              ;;
+            secret_missing)
+              BODY="FAILED: REPO_FACTORY_TOKEN is not configured."
+              ;;
+            invalid)
+              BODY="FAILED: $MESSAGE"
+              ;;
+            *)
+              BODY="FAILED: $MESSAGE"
+              ;;
+          esac
+
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" \
+            -f body="$BODY"
+\n'"CONTEXT_CAPSULE: NOT_APPLICABLE"
+              elif [ "$CAPSULE_OUTCOME" = "success" ]; then
+                BODY="$BODY"
+
+              if [ "$STANDARD_SECRETS" = "false" ]; then
+                BODY="$BODY"$'\n'"STANDARD_SECRETS: SKIPPED_BY_REQUEST"
+              else
+                case "$SECRETS_STATUS" in
+                  synced)
+                    BODY="$BODY"$'\n'"STANDARD_SECRETS: SYNCED"
+                    ;;
+                  not_configured)
+                    BODY="$BODY"$'\n'"STANDARD_SECRETS: NOT_CONFIGURED_IN_FACTORY"
+                    ;;
+                  failed)
+                    BODY="$BODY"$'\n'"STANDARD_SECRETS: SYNC_FAILED"
+                    ;;
+                  *)
+                    BODY="$BODY"$'\n'"STANDARD_SECRETS: UNKNOWN"
+                    ;;
+                esac
+              fi
+              ;;
+            secret_missing)
+              BODY="FAILED: REPO_FACTORY_TOKEN is not configured."
+              ;;
+            invalid)
+              BODY="FAILED: $MESSAGE"
+              ;;
+            *)
+              BODY="FAILED: $MESSAGE"
+              ;;
+          esac
+
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" \
+            -f body="$BODY"
+\n'"CONTEXT_CAPSULE: INSTALLED"
+              else
+                BODY="$BODY"
+
+              if [ "$STANDARD_SECRETS" = "false" ]; then
+                BODY="$BODY"$'\n'"STANDARD_SECRETS: SKIPPED_BY_REQUEST"
+              else
+                case "$SECRETS_STATUS" in
+                  synced)
+                    BODY="$BODY"$'\n'"STANDARD_SECRETS: SYNCED"
+                    ;;
+                  not_configured)
+                    BODY="$BODY"$'\n'"STANDARD_SECRETS: NOT_CONFIGURED_IN_FACTORY"
+                    ;;
+                  failed)
+                    BODY="$BODY"$'\n'"STANDARD_SECRETS: SYNC_FAILED"
+                    ;;
+                  *)
+                    BODY="$BODY"$'\n'"STANDARD_SECRETS: UNKNOWN"
+                    ;;
+                esac
+              fi
+              ;;
+            secret_missing)
+              BODY="FAILED: REPO_FACTORY_TOKEN is not configured."
+              ;;
+            invalid)
+              BODY="FAILED: $MESSAGE"
+              ;;
+            *)
+              BODY="FAILED: $MESSAGE"
+              ;;
+          esac
+
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" \
+            -f body="$BODY"
+\n'"CONTEXT_CAPSULE: FAILED"
               fi
 
               if [ "$STANDARD_SECRETS" = "false" ]; then
