@@ -17,8 +17,8 @@ jobs:
           set -euo pipefail
           gh auth setup-git >/dev/null
           gh repo clone lvlaksim1/agent-control-plane target >/dev/null
-          git -C target checkout --detach e294de0bddc91557f226090f98f9461e6e2af856
-          test "$(git -C target rev-parse HEAD)" = "e294de0bddc91557f226090f98f9461e6e2af856"
+          git -C target checkout --detach 33e65f644140163868e20dac581806e4e104b5a1
+          test "$(git -C target rev-parse HEAD)" = "33e65f644140163868e20dac581806e4e104b5a1"
       - name: Validate contracts
         run: python3 target/tools/control_plane.py validate --root target
       - name: Run regression suite
