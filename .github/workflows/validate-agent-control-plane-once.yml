@@ -17,8 +17,8 @@ jobs:
           set -euo pipefail
           gh auth setup-git >/dev/null
           gh repo clone lvlaksim1/agent-control-plane target >/dev/null
-          git -C target checkout --detach 33e65f644140163868e20dac581806e4e104b5a1
-          test "$(git -C target rev-parse HEAD)" = "33e65f644140163868e20dac581806e4e104b5a1"
+          git -C target checkout --detach aa88f107f163b5c96fa6c87074f4a986a23d3695
+          test "$(git -C target rev-parse HEAD)" = "aa88f107f163b5c96fa6c87074f4a986a23d3695"
       - name: Validate contracts
         run: python3 target/tools/control_plane.py validate --root target
       - name: Run regression suite
@@ -29,7 +29,10 @@ jobs:
           import json, pathlib
           r=pathlib.Path("target")
           reg=json.loads((r/"registry/agents.json").read_text())
-          assert all(a["automatic_execution_allowed"] is False for a in reg["agents"])
+          by_id={a["agent_id"]:a for a in reg["agents"]}
+          assert by_id["ecosystem-supervisor"]["automatic_execution_allowed"] is True
+          assert by_id["context-capsule-project-manager"]["automatic_execution_allowed"] is False
+          assert by_id["project-manager-auditor"]["automatic_execution_allowed"] is False
           lease=json.loads((r/"runtime/lease.json").read_text())
           assert lease["state"]=="idle"
           print("ACP_9_13_VALID")
