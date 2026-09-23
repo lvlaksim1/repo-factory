@@ -1,0 +1,66 @@
+name: Validate Control Plane Once
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  validate:
+    if: github.event.issue.user.login == 'lvlaksim1' && github.event.issue.title == '[VALIDATE_CONTROL_PLANE_ONCE]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone exact control-plane snapshot
+        env:
+          GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
+          TARGET_REPO: lvlaksim1/agent-control-plane
+          TARGET_SHA: ee8062a2f65684b847a55c55bf3d78317d4ea951
+        run: |
+          set -euo pipefail
+          gh auth setup-git >/dev/null
+          gh repo clone "$TARGET_REPO" target >/dev/null
+          git -C target checkout --detach "$TARGET_SHA"
+          test "$(git -C target rev-parse HEAD)" = "$TARGET_SHA"
+
+      - name: Validate repository contracts
+        run: python3 target/tools/control_plane.py validate --root target
+
+      - name: Run deterministic state-machine tests
+        run: python3 -m unittest discover -s target/tests -v
+
+      - name: Verify foundation safety posture
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("target")
+          reg = json.loads((root/"registry/agents.json").read_text())
+          assert reg["agents"], "registry must not be empty"
+          assert all(a["automatic_execution_allowed"] is False for a in reg["agents"])
+          lease = json.loads((root/"runtime/lease.json").read_text())
+          assert lease["state"] == "idle"
+          assert lease["generation"] == 0
+          task_dirs = [p for p in (root/"tasks").iterdir() if p.is_dir()]
+          assert not task_dirs, "foundation must not seed production tasks"
+          print("FOUNDATION_SAFE")
+          PY
+
+      - name: Report success
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" -f body='CONTROL_PLANE_VALIDATION_OK: ee8062a2f65684b847a55c55bf3d78317d4ea951'
+
+      - name: Report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" -f body='CONTROL_PLANE_VALIDATION_FAILED: inspect workflow run'
