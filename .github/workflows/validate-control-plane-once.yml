@@ -17,7 +17,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
           TARGET_REPO: lvlaksim1/agent-control-plane
-          TARGET_SHA: ee8062a2f65684b847a55c55bf3d78317d4ea951
+          TARGET_SHA: b679a127063b8f3bd266a0ec37f087711f5d72b7
         run: |
           set -euo pipefail
           gh auth setup-git >/dev/null
@@ -55,7 +55,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" -f body='CONTROL_PLANE_VALIDATION_OK: ee8062a2f65684b847a55c55bf3d78317d4ea951'
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" -f body='CONTROL_PLANE_VALIDATION_OK: b679a127063b8f3bd266a0ec37f087711f5d72b7'
 
       - name: Report failure
         if: failure()
