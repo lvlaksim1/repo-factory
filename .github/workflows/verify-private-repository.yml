@@ -1,0 +1,123 @@
+name: Verify Private Repository
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  verify:
+    if: github.event.issue.user.login == 'lvlaksim1' && github.event.issue.title == '[VERIFY_PRIVATE_REPOSITORY]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Parse and validate request
+        id: request
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$ISSUE_BODY" > request.json
+          jq -e . request.json >/dev/null
+
+          NAME="$(jq -r '.name // empty' request.json)"
+          COMMIT="$(jq -r '.commit // empty' request.json)"
+          PROFILE="$(jq -r '.profile // empty' request.json)"
+
+          if [[ ! "$NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "Invalid repository name" >&2
+            exit 2
+          fi
+          if [[ ! "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "commit must be an exact 40-character lowercase SHA" >&2
+            exit 2
+          fi
+
+          case "$NAME:$PROFILE" in
+            agent-control-plane:agent-control-plane)
+              ;;
+            supervisor:supervisor)
+              ;;
+            *)
+              echo "Unsupported repository/profile pair" >&2
+              exit 2
+              ;;
+          esac
+
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "profile=$PROFILE" >> "$GITHUB_OUTPUT"
+
+      - name: Clone exact private snapshot
+        env:
+          GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
+          NAME: ${{ steps.request.outputs.name }}
+          COMMIT: ${{ steps.request.outputs.commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN:-}"
+          gh repo clone "lvlaksim1/$NAME" target -- --no-checkout
+          git -C target checkout --detach "$COMMIT"
+          test "$(git -C target rev-parse HEAD)" = "$COMMIT"
+          git -C target remote remove origin
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Verify Agent Control Plane
+        if: steps.request.outputs.profile == 'agent-control-plane'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd target
+          python -m compileall -q tools
+          python -m unittest discover -s tests
+
+      - name: Verify Supervisor
+        if: steps.request.outputs.profile == 'supervisor'
+        shell: bash
+        run: |
+          set -euo pipefail
+          CORE_COMMIT="$(python - <<'PY'
+          import json
+          from pathlib import Path
+          print(json.loads(Path("target/.context/capsule.json").read_text(encoding="utf-8"))["core_commit"])
+          PY
+          )"
+          test "$CORE_COMMIT" != ""
+          git clone --quiet https://github.com/lvlaksim1/context-capsule.git /tmp/context-capsule
+          git -C /tmp/context-capsule checkout --quiet --detach "$CORE_COMMIT"
+          python /tmp/context-capsule/installer/capsulectl.py service-validate --target target
+          python /tmp/context-capsule/installer/capsulectl.py service-ready --target target
+          python /tmp/context-capsule/installer/capsulectl.py service-recover --target target --max-chars 65536 > /tmp/supervisor-recovery.txt
+          test -s /tmp/supervisor-recovery.txt
+          grep -q "Agent ID: ecosystem-supervisor" /tmp/supervisor-recovery.txt
+          grep -q "Role: Supervisor" /tmp/supervisor-recovery.txt
+          grep -q "## PROFILE STATE: .context/supervisor/master-plan.md" /tmp/supervisor-recovery.txt
+          grep -q "## PROFILE STATE: .context/supervisor/projects.md" /tmp/supervisor-recovery.txt
+          grep -q "## PROFILE STATE: .context/supervisor/agents.md" /tmp/supervisor-recovery.txt
+
+      - name: Report result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          NAME: ${{ steps.request.outputs.name }}
+          COMMIT: ${{ steps.request.outputs.commit }}
+          PROFILE: ${{ steps.request.outputs.profile }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ job.status }}" = "success" ]; then
+            BODY="VERIFICATION_OK: $NAME@$COMMIT profile=$PROFILE"
+          else
+            BODY="VERIFICATION_FAILED: $NAME@$COMMIT profile=$PROFILE"
+          fi
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/$ISSUE_NUMBER/comments" -f body="$BODY"

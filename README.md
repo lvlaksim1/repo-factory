@@ -171,3 +171,44 @@ Telegram-related secrets нужны только для соответствую
 Значения secrets не пишутся в код, Issue или комментарии workflow.
 
 Удаление репозиториев фабрика не поддерживает.
+
+
+## Проверка приватных репозиториев без расходования приватных Actions minutes
+
+Для приватных инфраструктурных репозиториев стандартные GitHub-hosted runners больше не являются каноническим способом проверки: они расходуют месячную квоту приватных Actions minutes.
+
+Проверка выполняется из этого публичного `repo-factory`, где стандартный GitHub-hosted runner для публичного репозитория не расходует приватную квоту.
+
+Создать Issue с точным заголовком:
+
+`[VERIFY_PRIVATE_REPOSITORY]`
+
+Для Agent Control Plane:
+
+```json
+{
+  "name": "agent-control-plane",
+  "commit": "40-character-exact-commit-sha",
+  "profile": "agent-control-plane"
+}
+```
+
+Для Supervisor:
+
+```json
+{
+  "name": "supervisor",
+  "commit": "40-character-exact-commit-sha",
+  "profile": "supervisor"
+}
+```
+
+Инварианты процесса:
+
+- проверяется только точный immutable commit SHA;
+- пары repository/profile разрешены явно и не принимают произвольную команду;
+- `REPO_FACTORY_TOKEN` используется только на отдельном шаге чтения приватного репозитория и не передаётся шагам тестирования;
+- исходный remote удаляется до исполнения тестов;
+- артефакты и Actions cache не загружаются;
+- результат фиксируется комментарием `VERIFICATION_OK` или `VERIFICATION_FAILED`;
+- приватные репозитории не должны использовать `ubuntu-latest`, `windows-latest` или `macos-latest` для обычной CI-проверки, если для них предусмотрен этот механизм.
