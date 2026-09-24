@@ -42,6 +42,10 @@ jobs:
               ;;
             supervisor:supervisor)
               ;;
+            evrasia-bot-max:evrasia-bot-max)
+              ;;
+            fgis-fsa-site:fgis-fsa-site)
+              ;;
             *)
               echo "Unsupported repository/profile pair" >&2
               exit 2
@@ -70,6 +74,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+
+      - name: Set up Node
+        if: steps.request.outputs.profile == 'evrasia-bot-max' || steps.request.outputs.profile == 'fgis-fsa-site'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
       - name: Verify Agent Control Plane
         if: steps.request.outputs.profile == 'agent-control-plane'
@@ -103,6 +113,32 @@ jobs:
           grep -q "## PROFILE STATE: .context/supervisor/master-plan.md" /tmp/supervisor-recovery.txt
           grep -q "## PROFILE STATE: .context/supervisor/projects.md" /tmp/supervisor-recovery.txt
           grep -q "## PROFILE STATE: .context/supervisor/agents.md" /tmp/supervisor-recovery.txt
+
+      - name: Verify Evrasia MAX static app
+        if: steps.request.outputs.profile == 'evrasia-bot-max'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd target
+          test -f index.html
+          grep -q 'data-app="evrasia-max-direct"' index.html
+          grep -q 'https://st.max.ru/js/max-web-app.js' index.html
+          grep -q 'script.google.com/macros/s/' index.html
+          test ! -e vercel.json
+          test ! -e package.json
+          test ! -d api
+          test ! -d lib
+          test ! -d tests
+          test ! -e .env.example
+
+      - name: Verify FGIS FSA site build
+        if: steps.request.outputs.profile == 'fgis-fsa-site'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd target
+          npm install --no-audit --no-fund
+          npm run build
 
       - name: Report result
         if: always()

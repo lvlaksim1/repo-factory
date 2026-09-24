@@ -212,3 +212,24 @@ Telegram-related secrets нужны только для соответствую
 - артефакты и Actions cache не загружаются;
 - результат фиксируется комментарием `VERIFICATION_OK` или `VERIFICATION_FAILED`;
 - приватные репозитории не должны использовать `ubuntu-latest`, `windows-latest` или `macos-latest` для обычной CI-проверки, если для них предусмотрен этот механизм.
+
+
+Дополнительные профили обычной проверки без производственных секретов:
+
+```json
+{
+  "name": "evrasia-bot-max",
+  "commit": "40-character-exact-commit-sha",
+  "profile": "evrasia-bot-max"
+}
+```
+
+```json
+{
+  "name": "fgis-fsa-site",
+  "commit": "40-character-exact-commit-sha",
+  "profile": "fgis-fsa-site"
+}
+```
+
+Эти профили заменяют прежние приватные `ubuntu-latest` проверки: MAX выполняет статическую валидацию, а сайт устанавливает зависимости на Node 22 и выполняет production-сборку. Производственные секреты не передаются.
