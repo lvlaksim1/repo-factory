@@ -1,0 +1,177 @@
+name: Promote FGIS installer baseline
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/promote-fgis-installer-baseline.yml
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Promote installer 230926 from GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          target_repo='lvlaksim1/fgis-fsa-il'
+          expected_main='bd1f557a421a12a7a937ab15041ad1f9e6f6624c'
+          release_version='25.230926'
+          asset_name='installer-25.230926.xlsm'
+          expected_size='9282566'
+          expected_sha256='29a542a575f6ca9aa8ad9419e0b4e5e3c670bf3d371404ebca9dfedd69837198'
+          old_installer='baseline/originals/УСТАНОВЩИК программы для ИЛ (версия 100926) ИСХОДНИК.xlsm'
+          new_installer='baseline/originals/УСТАНОВЩИК программы для ИЛ (версия 230926) ИСХОДНИК.xlsm'
+          target_temp_workflow='.github/workflows/promote-release-installer-baseline.yml'
+
+          test -n "${GH_TOKEN:-}"
+          test "$(gh api "repos/$target_repo" --jq '.permissions.push')" = 'true'
+          test "$(gh api "repos/$target_repo/git/ref/heads/main" --jq '.object.sha')" = "$expected_main"
+
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+
+          gh auth setup-git >/dev/null
+          gh repo clone "$target_repo" "$work/target" -- --quiet
+          cd "$work/target"
+          git checkout --quiet main
+          test "$(git rev-parse HEAD)" = "$expected_main"
+
+          mkdir -p "$work/release"
+          gh release download "$release_version" \
+            --repo "$target_repo" \
+            --pattern "$asset_name" \
+            --dir "$work/release" \
+            --clobber
+
+          downloaded="$work/release/$asset_name"
+          test -f "$downloaded"
+          test "$(stat -c %s "$downloaded")" = "$expected_size"
+          printf '%s  %s\n' "$expected_sha256" "$downloaded" | sha256sum -c -
+
+          python - <<'PY'
+          import json
+          import shutil
+          import xml.etree.ElementTree as ET
+          import zipfile
+          from hashlib import sha256
+          from pathlib import Path
+          import os
+
+          root = Path.cwd()
+          release_file = Path(os.environ["RUNNER_TEMP"]).parent / "unused"
+          # Resolve the downloaded asset from the shell-created temporary tree.
+          candidates = list(Path("/tmp").glob("tmp.*/release/installer-25.230926.xlsm"))
+          if len(candidates) != 1:
+              raise SystemExit(f"Expected one downloaded release asset, found {len(candidates)}")
+          downloaded = candidates[0]
+
+          old_path = root / "baseline/originals/УСТАНОВЩИК программы для ИЛ (версия 100926) ИСХОДНИК.xlsm"
+          new_path = root / "baseline/originals/УСТАНОВЩИК программы для ИЛ (версия 230926) ИСХОДНИК.xlsm"
+          registry_path = root / "baseline/originals/реестр протоколов (v25).xlsm"
+          manifest_path = root / "baseline/manifest.json"
+
+          expected_size = 9282566
+          expected_sha = "29a542a575f6ca9aa8ad9419e0b4e5e3c670bf3d371404ebca9dfedd69837198"
+          registry_sha = "31d1aa2f3a19d8703abed4addef595fdec28b63c006162e61cdcb3856d7e795c"
+
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          assert manifest["files"]["installer"] == {
+              "original_path": "baseline/originals/УСТАНОВЩИК программы для ИЛ (версия 100926) ИСХОДНИК.xlsm",
+              "output_name": "УСТАНОВЩИК программы для ИЛ (версия 100926) ИСХОДНИК.xlsm",
+              "size": 9807225,
+              "sha256": "14e187034423b5a9c83d222875b6e80e591b61b1a0a5d26931f6d3af925afc9f",
+          }
+          registry_before = json.loads(json.dumps(manifest["files"]["registry"], ensure_ascii=False))
+          assert registry_before == {
+              "original_path": "baseline/originals/реестр протоколов (v25).xlsm",
+              "output_name": "реестр протоколов (v25).xlsm",
+              "size": 1766348,
+              "sha256": registry_sha,
+          }
+
+          data = downloaded.read_bytes()
+          assert len(data) == expected_size
+          assert sha256(data).hexdigest() == expected_sha
+
+          shutil.copyfile(downloaded, new_path)
+          copied = new_path.read_bytes()
+          assert copied == data
+
+          if old_path != new_path:
+              old_path.unlink()
+
+          manifest["files"]["installer"] = {
+              "original_path": "baseline/originals/УСТАНОВЩИК программы для ИЛ (версия 230926) ИСХОДНИК.xlsm",
+              "output_name": "УСТАНОВЩИК программы для ИЛ (версия 230926) ИСХОДНИК.xlsm",
+              "size": expected_size,
+              "sha256": expected_sha,
+          }
+          assert manifest["files"]["registry"] == registry_before
+          assert sha256(registry_path.read_bytes()).hexdigest() == registry_sha
+          manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+          with zipfile.ZipFile(new_path) as z:
+              bad = z.testzip()
+              assert bad is None, f"CRC error in {bad}"
+              for name in z.namelist():
+                  if name.endswith(".xml") or name.endswith(".rels"):
+                      ET.fromstring(z.read(name))
+          PY
+
+          python -m pip install --disable-pip-version-check -q 'pyOpenVBA==5.2.3'
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from pyopenvba import ExcelFile
+
+          manifest = json.loads(Path("baseline/manifest.json").read_text(encoding="utf-8"))
+          for role, info in manifest["files"].items():
+              path = Path(info["original_path"])
+              with ExcelFile(str(path)) as workbook:
+                  issues = workbook.validate()
+                  if issues:
+                      raise SystemExit(f"{role}: pyOpenVBA validate() returned {issues}")
+              print(f"PASS pyOpenVBA: {role} {path.name}")
+          PY
+
+          test "$(stat -c %s "$new_installer")" = "$expected_size"
+          printf '%s  %s\n' "$expected_sha256" "$new_installer" | sha256sum -c -
+
+          test -f "$target_temp_workflow"
+          rm -f "$target_temp_workflow"
+
+          git add -A -- baseline "$target_temp_workflow"
+
+          unexpected="$(
+            git diff --cached --name-only --no-renames |
+            grep -vFx "$old_installer" |
+            grep -vFx "$new_installer" |
+            grep -vFx 'baseline/manifest.json' |
+            grep -vFx "$target_temp_workflow" || true
+          )"
+          test -z "$unexpected"
+
+          if git diff --cached --name-only --no-renames | grep -Fx 'baseline/originals/реестр протоколов (v25).xlsm'; then
+            echo 'Registry baseline file changed unexpectedly.' >&2
+            exit 1
+          fi
+
+          test "$(gh api "repos/$target_repo/git/ref/heads/main" --jq '.object.sha')" = "$expected_main"
+
+          git config user.name 'repo-factory'
+          git config user.email 'repo-factory@users.noreply.github.com'
+          git commit -m 'Accept installer 230926 from release 25.230926 as baseline'
+          new_commit="$(git rev-parse HEAD)"
+          git push --quiet origin HEAD:main
+
+          echo "NEW_MAIN=$new_commit"
+          echo "INSTALLER_SHA256=$expected_sha256"
+          echo "REGISTRY_UNCHANGED=true"
