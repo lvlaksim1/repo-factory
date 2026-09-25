@@ -1,0 +1,110 @@
+name: Finalize FGIS installer baseline
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/finalize-fgis-installer-baseline.yml
+
+permissions:
+  contents: read
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Regenerate exact installer baseline container
+        env:
+          GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          target_repo='lvlaksim1/fgis-fsa-il'
+          expected_main='1970baa3391cbb8d4e6a2e813f1e4d8a5cd479b7'
+          expected_installer_sha='29a542a575f6ca9aa8ad9419e0b4e5e3c670bf3d371404ebca9dfedd69837198'
+          expected_registry_sha='31d1aa2f3a19d8703abed4addef595fdec28b63c006162e61cdcb3856d7e795c'
+
+          test -n "${GH_TOKEN:-}"
+          test "$(gh api "repos/$target_repo" --jq '.permissions.push')" = 'true'
+          test "$(gh api "repos/$target_repo/git/ref/heads/main" --jq '.object.sha')" = "$expected_main"
+
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+
+          gh auth setup-git >/dev/null
+          gh repo clone "$target_repo" "$work/target" -- --quiet
+          cd "$work/target"
+          git checkout --quiet main
+          test "$(git rev-parse HEAD)" = "$expected_main"
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from tools.prepare_repository import verify_original, split_exact_container
+
+          root = Path.cwd()
+          manifest = json.loads((root / "baseline/manifest.json").read_text(encoding="utf-8"))
+          installer = manifest["files"]["installer"]
+          registry = manifest["files"]["registry"]
+
+          assert installer["original_path"] == "baseline/originals/УСТАНОВЩИК программы для ИЛ (версия 230926) ИСХОДНИК.xlsm"
+          assert installer["size"] == 9282566
+          assert installer["sha256"] == "29a542a575f6ca9aa8ad9419e0b4e5e3c670bf3d371404ebca9dfedd69837198"
+
+          assert registry == {
+              "original_path": "baseline/originals/реестр протоколов (v25).xlsm",
+              "output_name": "реестр протоколов (v25).xlsm",
+              "size": 1766348,
+              "sha256": "31d1aa2f3a19d8703abed4addef595fdec28b63c006162e61cdcb3856d7e795c",
+          }
+
+          original = root / installer["original_path"]
+          verify_original(original, installer)
+          split_exact_container(root, "installer", original, installer)
+          PY
+
+          python tools/rebuild_exact.py --compare-originals
+
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path.cwd()
+          manifest = json.loads((root / "baseline/manifest.json").read_text(encoding="utf-8"))
+          layout = json.loads((root / "baseline/installer/container/layout.json").read_text(encoding="utf-8"))
+
+          assert layout["source_name"] == "УСТАНОВЩИК программы для ИЛ (версия 230926) ИСХОДНИК.xlsm"
+          assert layout["source_size"] == 9282566
+          assert layout["source_sha256"] == "29a542a575f6ca9aa8ad9419e0b4e5e3c670bf3d371404ebca9dfedd69837198"
+
+          registry = root / manifest["files"]["registry"]["original_path"]
+          h = hashlib.sha256(registry.read_bytes()).hexdigest()
+          assert h == "31d1aa2f3a19d8703abed4addef595fdec28b63c006162e61cdcb3856d7e795c"
+          PY
+
+          git add -A -- baseline/installer/container
+
+          changed="$(git -c core.quotepath=false diff --cached --name-only)"
+          test -n "$changed"
+          unexpected="$(printf '%s\n' "$changed" | grep -v '^baseline/installer/container/' || true)"
+          test -z "$unexpected"
+
+          if git status --porcelain --untracked-files=no | grep -E 'baseline/registry|реестр протоколов'; then
+            echo 'Registry baseline changed unexpectedly.' >&2
+            exit 1
+          fi
+
+          test "$(gh api "repos/$target_repo/git/ref/heads/main" --jq '.object.sha')" = "$expected_main"
+
+          git config user.name 'repo-factory'
+          git config user.email 'repo-factory@users.noreply.github.com'
+          git commit -m 'Refresh exact installer baseline container for 230926'
+          new_commit="$(git rev-parse HEAD)"
+          git push --quiet origin HEAD:main
+
+          echo "NEW_MAIN=$new_commit"
+          echo "INSTALLER_BASELINE=230926"
+          echo "REGISTRY_UNCHANGED=true"
