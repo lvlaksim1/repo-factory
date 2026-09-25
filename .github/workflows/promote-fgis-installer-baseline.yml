@@ -151,7 +151,7 @@ jobs:
           git add -A -- baseline "$target_temp_workflow"
 
           unexpected="$(
-            git diff --cached --name-only --no-renames |
+            git -c core.quotepath=false diff --cached --name-only --no-renames |
             grep -vFx "$old_installer" |
             grep -vFx "$new_installer" |
             grep -vFx 'baseline/manifest.json' |
@@ -159,7 +159,7 @@ jobs:
           )"
           test -z "$unexpected"
 
-          if git diff --cached --name-only --no-renames | grep -Fx 'baseline/originals/реестр протоколов (v25).xlsm'; then
+          if git -c core.quotepath=false diff --cached --name-only --no-renames | grep -Fx 'baseline/originals/реестр протоколов (v25).xlsm'; then
             echo 'Registry baseline file changed unexpectedly.' >&2
             exit 1
           fi
