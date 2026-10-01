@@ -1,0 +1,29 @@
+name: SRRM RepoFactory Doorbell Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/srrm-repofactory-doorbell-probe.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  doorbell:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Observe probe reaction
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          json="$(gh api -H "Accept: application/vnd.github+json" "repos/$REPO/issues/comments/5901477629/reactions")"
+          jq -r '.[] | [.id,.content,.user.login] | @tsv' <<<"$json" || true
+      - name: Keep run rerunnable
+        run: |
+          echo "INTENTIONAL_FAILURE=1"
+          exit 1
