@@ -1,0 +1,54 @@
+name: SRRM GHCR Hookshot Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/srrm-ghcr-hookshot-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe GHCR upload-session POST under Hookshot profile
+        env:
+          CONSUMER_TOKEN: ${{ secrets.CONSUMER_DISPATCH_TOKEN }}
+          FACTORY_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw='{"action":"created","reaction":{"content":"rocket"},"repository":{"full_name":"lvlaksim1/ai-agent-lab"},"sender":{"login":"lvlaksim1"}}'
+          probe() {
+            label="$1"; pat="$2"
+            echo "=== $label ==="
+            acode="$(curl -sS -D "/tmp/${label}-auth.h" -o "/tmp/${label}-auth.json" -w '%{http_code}' \
+              -u "lvlaksim1:$pat" \
+              'https://ghcr.io/token?service=ghcr.io&scope=repository:lvlaksim1/srrm-reaction-probe:pull,push')"
+            echo "AUTH_HTTP=$acode"
+            tok="$(jq -r '.token // .access_token // empty' "/tmp/${label}-auth.json" 2>/dev/null || true)"
+            echo "REGISTRY_TOKEN_PRESENT=$([[ -n "$tok" ]] && echo 1 || echo 0)"
+            if [[ -z "$tok" ]]; then
+              msg="$(jq -r '.errors[0].message // .message // empty' "/tmp/${label}-auth.json" 2>/dev/null || true)"
+              [[ -n "$msg" ]] && echo "AUTH_MESSAGE=$msg" || true
+              return
+            fi
+            ucode="$(curl -sS -D "/tmp/${label}-up.h" -o "/tmp/${label}-up.b" -w '%{http_code}' \
+              -H "Authorization: Bearer $tok" \
+              -H 'Content-Type: application/json' \
+              -H 'User-Agent: GitHub-Hookshot/test' \
+              -H 'X-GitHub-Event: reaction' \
+              -X POST --data-binary "$raw" \
+              'https://ghcr.io/v2/lvlaksim1/srrm-reaction-probe/blobs/uploads/')"
+            echo "UPLOAD_INIT_HTTP=$ucode"
+            loc="$(grep -i '^location:' "/tmp/${label}-up.h" | tail -n1 | cut -d: -f2- | sed 's/^[[:space:]]*//' | tr -d '\r' || true)"
+            echo "LOCATION_PRESENT=$([[ -n "$loc" ]] && echo 1 || echo 0)"
+            if [[ -s "/tmp/${label}-up.b" ]]; then
+              msg="$(jq -r '.errors[0].message // .message // empty' "/tmp/${label}-up.b" 2>/dev/null || true)"
+              [[ -n "$msg" ]] && echo "UPLOAD_MESSAGE=$msg" || true
+            fi
+          }
+          probe CONSUMER "$CONSUMER_TOKEN"
+          probe FACTORY "$FACTORY_TOKEN"
