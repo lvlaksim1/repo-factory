@@ -1,0 +1,45 @@
+name: SRRM Consumer Release Asset Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/srrm-consumer-release-asset-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Upload raw reaction body as release asset
+        env:
+          TOKEN: ${{ secrets.CONSUMER_DISPATCH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$TOKEN" ]]; then
+            echo "TOKEN_PRESENT=0"
+            exit 0
+          fi
+          echo "TOKEN_PRESENT=1"
+
+          raw='{"action":"created","reaction":{"content":"rocket"},"repository":{"full_name":"lvlaksim1/ai-agent-lab"},"sender":{"login":"lvlaksim1"}}'
+          url='https://uploads.github.com/repos/lvlaksim1/ai-agent-lab/releases/400480102/assets?name=srrm-reaction-pulse.json'
+
+          code="$(curl -sS -o /tmp/body -w '%{http_code}' \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            --data-binary "$raw" \
+            "$url")"
+
+          echo "UPLOAD_HTTP=$code"
+          if [[ "$code" == "201" ]]; then
+            jq -c '{id,name,size,state,url,browser_download_url}' /tmp/body
+          else
+            jq -c '{message,errors,status}' /tmp/body 2>/dev/null || cat /tmp/body
+          fi
