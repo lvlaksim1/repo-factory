@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Create temporary project, inspect workflows, delete project
         env:
-          TOKEN: ${{ secrets.CONSUMER_DISPATCH_TOKEN }}
+          TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
@@ -37,7 +37,7 @@ jobs:
           echo "REPO_ID_PRESENT=$([[ -n "$repo" && "$repo" != null ]] && echo 1 || echo 0)"
 
           create='mutation($owner:ID!,$repo:ID!,$title:String!){ createProjectV2(input:{ownerId:$owner,repositoryId:$repo,title:$title}) { projectV2 { id number title url workflows(first:50){nodes{id number name enabled createdAt updatedAt}} } } }'
-          vars="$(jq -nc --arg owner "$owner" --arg repo "$repo" --arg title 'SRRM Reaction Native Probe TEMP' '{owner:$owner,repo:$repo,title:$title}')"
+          vars="$(jq -nc --arg owner "$owner" --arg repo "$repo" --arg title 'SRRM Reaction Native Probe FACTORY TEMP' '{owner:$owner,repo:$repo,title:$title}')"
           gql "$create" "$vars" > /tmp/create.json
           jq -c '{errors,project:.data.createProjectV2.projectV2}' /tmp/create.json
           pid="$(jq -r '.data.createProjectV2.projectV2.id // empty' /tmp/create.json)"
