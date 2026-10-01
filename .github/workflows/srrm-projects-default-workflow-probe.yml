@@ -1,0 +1,52 @@
+name: SRRM Projects Default Workflow Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/srrm-projects-default-workflow-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create temporary project, inspect workflows, delete project
+        env:
+          TOKEN: ${{ secrets.CONSUMER_DISPATCH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gql() {
+            q="$1"; vars="$2"
+            curl -sS \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -X POST --data-binary "$(jq -nc --arg q "$q" --argjson v "$vars" '{query:$q,variables:$v}')" \
+              'https://api.github.com/graphql'
+          }
+
+          ids='query { viewer { id login } repository(owner:"lvlaksim1",name:"ai-agent-lab") { id } }'
+          gql "$ids" '{}' > /tmp/ids.json
+          owner="$(jq -r '.data.viewer.id' /tmp/ids.json)"
+          repo="$(jq -r '.data.repository.id' /tmp/ids.json)"
+          echo "OWNER_LOGIN=$(jq -r '.data.viewer.login' /tmp/ids.json)"
+          echo "OWNER_ID_PRESENT=$([[ -n "$owner" && "$owner" != null ]] && echo 1 || echo 0)"
+          echo "REPO_ID_PRESENT=$([[ -n "$repo" && "$repo" != null ]] && echo 1 || echo 0)"
+
+          create='mutation($owner:ID!,$repo:ID!,$title:String!){ createProjectV2(input:{ownerId:$owner,repositoryId:$repo,title:$title}) { projectV2 { id number title url workflows(first:50){nodes{id number name enabled createdAt updatedAt}} } } }'
+          vars="$(jq -nc --arg owner "$owner" --arg repo "$repo" --arg title 'SRRM Reaction Native Probe TEMP' '{owner:$owner,repo:$repo,title:$title}')"
+          gql "$create" "$vars" > /tmp/create.json
+          jq -c '{errors,project:.data.createProjectV2.projectV2}' /tmp/create.json
+          pid="$(jq -r '.data.createProjectV2.projectV2.id // empty' /tmp/create.json)"
+          [[ -n "$pid" ]] || exit 0
+
+          echo 'WORKFLOWS:'
+          jq -c '.data.createProjectV2.projectV2.workflows.nodes[] | {id,number,name,enabled,createdAt,updatedAt}' /tmp/create.json || true
+
+          del='mutation($id:ID!){ deleteProjectV2(input:{projectId:$id}) { clientMutationId } }'
+          gql "$del" "$(jq -nc --arg id "$pid" '{id:$id}')" > /tmp/delete.json
+          echo -n 'DELETE='
+          jq -c '{errors,data}' /tmp/delete.json
