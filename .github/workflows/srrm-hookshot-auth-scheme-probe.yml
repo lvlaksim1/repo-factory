@@ -35,8 +35,9 @@ jobs:
               title="$(grep -o '<title>[^<]*' /tmp/body | head -n1 | sed 's/<title>//' || true)"
               msg="$(jq -r '.message // empty' /tmp/body 2>/dev/null || true)"
               [[ -n "$title" ]] && echo "${name}_TITLE=$title"
-              [[ -n "$msg" ]] && echo "${name}_MESSAGE=$msg"
+              [[ -n "$msg" ]] && echo "${name}_MESSAGE=$msg" || true
             fi
+            return 0
           }
 
           report BEARER -H "Authorization: Bearer $TOKEN" "$base"
