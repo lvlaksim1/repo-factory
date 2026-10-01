@@ -1,0 +1,52 @@
+name: SRRM Consumer Webhook Permission Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/srrm-consumer-webhook-permission-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test webhook permission on ai-agent-lab
+        env:
+          TOKEN: ${{ secrets.CONSUMER_DISPATCH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          target='https://api.github.com/repos/lvlaksim1/ai-agent-lab/hooks'
+          gcode="$(curl -sS -o /tmp/get -w '%{http_code}' \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$target")"
+          echo "HOOK_LIST_HTTP=$gcode"
+          gmsg="$(jq -r '.message // empty' /tmp/get 2>/dev/null || true)"
+          [[ -n "$gmsg" ]] && echo "HOOK_LIST_MESSAGE=$gmsg" || true
+
+          payload='{"name":"web","active":false,"events":["push"],"config":{"url":"https://example.com/srrm-probe","content_type":"json","insecure_ssl":"0"}}'
+          ccode="$(curl -sS -o /tmp/create -w '%{http_code}' \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/json" \
+            -X POST --data-binary "$payload" "$target")"
+          echo "HOOK_CREATE_HTTP=$ccode"
+          cmsg="$(jq -r '.message // empty' /tmp/create 2>/dev/null || true)"
+          [[ -n "$cmsg" ]] && echo "HOOK_CREATE_MESSAGE=$cmsg" || true
+
+          if [[ "$ccode" == "201" ]]; then
+            id="$(jq -r '.id' /tmp/create)"
+            echo "HOOK_ID=$id"
+            dcode="$(curl -sS -o /tmp/delete -w '%{http_code}' \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              -X DELETE "$target/$id")"
+            echo "HOOK_DELETE_HTTP=$dcode"
+          fi
