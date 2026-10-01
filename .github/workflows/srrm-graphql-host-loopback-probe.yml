@@ -1,0 +1,46 @@
+name: SRRM GraphQL Host Loopback Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/srrm-graphql-host-loopback-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe GraphQL query-string with raw reaction JSON under Hookshot UA
+        env:
+          TOKEN: ${{ secrets.CONSUMER_DISPATCH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw='{"action":"created","reaction":{"content":"eyes"},"repository":{"full_name":"lvlaksim1/ai-agent-lab"},"sender":{"login":"lvlaksim1"}}'
+          q='query { viewer { login } }'
+          qe="$(jq -nr --arg v "$q" '$v|@uri')"
+          call() {
+            name="$1"; base="$2"; ua="$3"
+            code="$(curl -sS -L --max-redirs 3 -o /tmp/body -w '%{http_code}' \
+              -H "Authorization: Bearer $TOKEN" \
+              -H 'Accept: application/json' \
+              -H 'Content-Type: application/json' \
+              -H "User-Agent: $ua" \
+              -X POST --data-binary "$raw" \
+              "$base?query=$qe")"
+            echo "${name}_HTTP=$code"
+            if [[ -s /tmp/body ]]; then
+              echo -n "${name}_BODY="
+              tr '\n' ' ' </tmp/body | head -c 800
+              echo
+            fi
+          }
+          call API_NORMAL_UA 'https://api.github.com/graphql' 'curl-probe'
+          call API_HOOKSHOT 'https://api.github.com/graphql' 'GitHub-Hookshot/test'
+          call GITHUB_GRAPHQL 'https://github.com/graphql' 'GitHub-Hookshot/test'
+          call GITHUB_API_GRAPHQL 'https://github.com/api/graphql' 'GitHub-Hookshot/test'
+          call WWW_GRAPHQL 'https://www.github.com/graphql' 'GitHub-Hookshot/test'
+          call GRAPHQL_SUBDOMAIN 'https://graphql.github.com/' 'GitHub-Hookshot/test'
