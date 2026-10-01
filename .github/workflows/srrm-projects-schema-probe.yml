@@ -1,0 +1,38 @@
+name: SRRM Projects Schema Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/srrm-projects-schema-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect Project-related GraphQL mutations and objects
+        env:
+          TOKEN: ${{ secrets.CONSUMER_DISPATCH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          q='query { __type(name:"Mutation") { fields { name } } }'
+          curl -sS -o /tmp/m.json \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -X POST --data-binary "$(jq -nc --arg q "$q" '{query:$q}')" \
+            'https://api.github.com/graphql'
+          echo 'MUTATIONS:'
+          jq -r '.data.__type.fields[].name' /tmp/m.json | grep -Ei 'project|workflow|automation' | sort || true
+
+          q2='query { __schema { types { name kind } } }'
+          curl -sS -o /tmp/t.json \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -X POST --data-binary "$(jq -nc --arg q "$q2" '{query:$q}')" \
+            'https://api.github.com/graphql'
+          echo 'TYPES:'
+          jq -r '.data.__schema.types[].name' /tmp/t.json | grep -Ei 'ProjectV2.*(Workflow|Automation)|Workflow.*Project|Automation.*Project' | sort || true
