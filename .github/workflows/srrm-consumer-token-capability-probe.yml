@@ -1,0 +1,39 @@
+name: SRRM Consumer Token Capability Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/srrm-consumer-token-capability-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test CONSUMER_DISPATCH_TOKEN against ai-agent-lab failed-run doorbell
+        env:
+          TOKEN: ${{ secrets.CONSUMER_DISPATCH_TOKEN }}
+          TARGET: "https://api.github.com/repos/lvlaksim1/ai-agent-lab/actions/runs/36790770227/rerun-failed-jobs"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$TOKEN" ]]; then
+            echo "TOKEN_PRESENT=0"
+            exit 0
+          fi
+          echo "TOKEN_PRESENT=1"
+          code="$(curl -sS -o /tmp/body -w '%{http_code}' \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d '{"action":"created","reaction":{"content":"eyes"}}' \
+            "$TARGET")"
+          echo "RERUN_HTTP=$code"
+          if [[ "$code" != "201" ]]; then
+            jq -r '.message // empty' /tmp/body | sed 's/.*/RERUN_ERROR_PRESENT=1/'
+          fi
