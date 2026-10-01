@@ -13,11 +13,13 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Test REPO_FACTORY_TOKEN on repo-factory itself
+      - name: Recheck REPO_FACTORY_TOKEN capabilities with safe error messages
         env:
           TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
           TARGET_REPO: "lvlaksim1/repo-factory"
           TARGET_RUN: "36832642578"
+          OTHER_REPO: "lvlaksim1/ai-agent-lab"
+          OTHER_RUN: "36790770227"
         shell: bash
         run: |
           set -euo pipefail
@@ -27,35 +29,42 @@ jobs:
           fi
           echo "TOKEN_PRESENT=1"
 
-          rerun_url="https://api.github.com/repos/$TARGET_REPO/actions/runs/$TARGET_RUN/rerun-failed-jobs"
-          rcode="$(curl -sS -o /tmp/rerun -w '%{http_code}' \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            -H "Content-Type: application/json" \
-            -X POST \
-            -d '{"action":"created","reaction":{"content":"eyes"}}' \
-            "$rerun_url")"
-          echo "RERUN_HTTP=$rcode"
-
-          hook_payload='{"name":"web","active":false,"events":["reaction"],"config":{"url":"https://example.com/srrm-probe","content_type":"json","insecure_ssl":"0"}}'
-          hcode="$(curl -sS -o /tmp/hook -w '%{http_code}' \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            -H "Content-Type: application/json" \
-            -X POST \
-            --data-binary "$hook_payload" \
-            "https://api.github.com/repos/$TARGET_REPO/hooks")"
-          echo "HOOK_CREATE_HTTP=$hcode"
-
-          if [[ "$hcode" == "201" ]]; then
-            id="$(jq -r '.id' /tmp/hook)"
-            dcode="$(curl -sS -o /tmp/del -w '%{http_code}' \
+          call() {
+            name="$1"; shift
+            code="$(curl -sS -o /tmp/body -w '%{http_code}' \
               -H "Authorization: Bearer $TOKEN" \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              -X DELETE \
-              "https://api.github.com/repos/$TARGET_REPO/hooks/$id")"
-            echo "HOOK_DELETE_HTTP=$dcode"
-          fi
+              "$@")"
+            echo "${name}_HTTP=$code"
+            msg="$(jq -r '.message // empty' /tmp/body 2>/dev/null || true)"
+            if [[ -n "$msg" ]]; then
+              echo "${name}_MESSAGE=$msg"
+            fi
+          }
+
+          call SELF_RERUN \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d '{"action":"created","reaction":{"content":"eyes"}}' \
+            "https://api.github.com/repos/$TARGET_REPO/actions/runs/$TARGET_RUN/rerun-failed-jobs"
+
+          call OTHER_RERUN \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d '{"action":"created","reaction":{"content":"eyes"}}' \
+            "https://api.github.com/repos/$OTHER_REPO/actions/runs/$OTHER_RUN/rerun-failed-jobs"
+
+          hook_payload='{"name":"web","active":false,"events":["reaction"],"config":{"url":"https://example.com/srrm-probe","content_type":"json","insecure_ssl":"0"}}'
+
+          call SELF_HOOK \
+            -H "Content-Type: application/json" \
+            -X POST \
+            --data-binary "$hook_payload" \
+            "https://api.github.com/repos/$TARGET_REPO/hooks"
+
+          call OTHER_HOOK \
+            -H "Content-Type: application/json" \
+            -X POST \
+            --data-binary "$hook_payload" \
+            "https://api.github.com/repos/$OTHER_REPO/hooks"
