@@ -13,11 +13,11 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Test REPO_FACTORY_TOKEN capabilities without exposing it
+      - name: Test REPO_FACTORY_TOKEN on repo-factory itself
         env:
           TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
-          TARGET_REPO: "lvlaksim1/ai-agent-lab"
-          TARGET_RUN: "36790770227"
+          TARGET_REPO: "lvlaksim1/repo-factory"
+          TARGET_RUN: "36832642578"
         shell: bash
         run: |
           set -euo pipefail
