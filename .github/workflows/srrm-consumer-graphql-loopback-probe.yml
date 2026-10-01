@@ -1,0 +1,50 @@
+name: SRRM Consumer GraphQL Loopback Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/srrm-consumer-graphql-loopback-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test GraphQL query-string execution with raw reaction body
+        env:
+          TOKEN: ${{ secrets.CONSUMER_DISPATCH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$TOKEN" ]]; then
+            echo "TOKEN_PRESENT=0"
+            exit 0
+          fi
+          echo "TOKEN_PRESENT=1"
+
+          raw='{"action":"created","reaction":{"content":"eyes"},"repository":{"full_name":"lvlaksim1/ai-agent-lab"}}'
+
+          q1='query { viewer { login } }'
+          q1e="$(jq -nr --arg v "$q1" '$v|@uri')"
+          c1="$(curl -sS -o /tmp/q1 -w '%{http_code}' \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            -X POST -d "$raw" \
+            "https://api.github.com/graphql?query=$q1e")"
+          echo "QUERY_HTTP=$c1"
+          jq -c '{data,errors}' /tmp/q1 2>/dev/null || cat /tmp/q1
+
+          mutation='mutation { createRepositoryDispatch(input:{repositoryId:"R_kgDOUfGbvA",eventType:"srrm_reaction",clientPayload:"{\"opcode\":\"eyes\",\"source\":\"graphql-querystring-probe\"}"}) { clientMutationId } }'
+          me="$(jq -nr --arg v "$mutation" '$v|@uri')"
+          c2="$(curl -sS -o /tmp/m -w '%{http_code}' \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            -X POST -d "$raw" \
+            "https://api.github.com/graphql?query=$me")"
+          echo "MUTATION_HTTP=$c2"
+          jq -c '{data,errors,message}' /tmp/m 2>/dev/null || cat /tmp/m
