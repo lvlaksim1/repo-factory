@@ -1,0 +1,35 @@
+name: SRRM Projects Capability Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/srrm-projects-capability-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe Projects V2 read capability
+        env:
+          FACTORY_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
+          CONSUMER_TOKEN: ${{ secrets.CONSUMER_DISPATCH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          query='query { viewer { login projectsV2(first:20) { nodes { id number title closed } } } }'
+          probe() {
+            label="$1"; token="$2"
+            code="$(curl -sS -o "/tmp/$label.json" -w '%{http_code}' \
+              -H "Authorization: Bearer $token" \
+              -H "Content-Type: application/json" \
+              -X POST --data-binary "$(jq -nc --arg q "$query" '{query:$q}')" \
+              'https://api.github.com/graphql')"
+            echo "${label}_HTTP=$code"
+            jq -c '{login:.data.viewer.login,projects:(.data.viewer.projectsV2.nodes // [] | map({id,number,title,closed})),errors,message}' "/tmp/$label.json" 2>/dev/null || cat "/tmp/$label.json"
+          }
+          probe FACTORY "$FACTORY_TOKEN"
+          probe CONSUMER "$CONSUMER_TOKEN"
