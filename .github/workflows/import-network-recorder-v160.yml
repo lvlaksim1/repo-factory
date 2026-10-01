@@ -18,6 +18,7 @@ jobs:
         id: import
         env:
           FACTORY_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
+          GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           TARGET_REPO: lvlaksim1/network-recorder
           EXPECTED_SHA256: eeb0cdfdf6323c96c6aea777ad9aed889522dc9de13e467b8f447723612e1db3
