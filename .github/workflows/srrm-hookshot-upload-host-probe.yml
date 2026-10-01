@@ -1,0 +1,40 @@
+name: SRRM Hookshot Upload Host Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/srrm-hookshot-upload-host-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test Hookshot UA against uploads.github.com
+        env:
+          TOKEN: ${{ secrets.CONSUMER_DISPATCH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw='{"action":"created","reaction":{"content":"rocket"},"repository":{"full_name":"lvlaksim1/ai-agent-lab"},"sender":{"login":"lvlaksim1"}}'
+          url='https://uploads.github.com/repos/lvlaksim1/ai-agent-lab/releases/400480102/assets?name=srrm-hookshot-ua-probe.json'
+          code="$(curl -sS -o /tmp/body -w '%{http_code}' \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: reaction" \
+            -H "X-GitHub-Delivery: 11111111-2222-3333-4444-555555555555" \
+            -H "X-GitHub-Hook-ID: 123456789" \
+            -H "User-Agent: GitHub-Hookshot/test" \
+            -X POST \
+            --data-binary "$raw" \
+            "$url")"
+          echo "UPLOAD_HTTP=$code"
+          if [[ -s /tmp/body ]]; then
+            tr '\n' ' ' </tmp/body | head -c 1000
+            echo
+          fi
