@@ -39,20 +39,26 @@ jobs:
             if [[ -n "$msg" ]]; then echo "${name}_MESSAGE=$msg"; fi
           }
 
-          call RERUN \
-            -H "Content-Type: application/json" \
-            -X POST \
-            -d '{"action":"created","reaction":{"content":"eyes"}}' \
-            "https://api.github.com/repos/$REPO/actions/runs/$RUN_ID/rerun-failed-jobs"
+          raw='{"action":"created","reaction":{"content":"eyes"},"repository":{"full_name":"lvlaksim1/ai-agent-lab"},"sender":{"login":"lvlaksim1"}}'
 
-          call DISPATCH \
+          call DISPATCH_WEBHOOK_HEADERS \
             -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: reaction" \
+            -H "X-GitHub-Delivery: 11111111-2222-3333-4444-555555555555" \
+            -H "X-GitHub-Hook-ID: 123456789" \
+            -H "User-Agent: GitHub-Hookshot/test" \
             -X POST \
-            -d '{"event_type":"srrm_reaction","client_payload":{"opcode":"eyes","source":"consumer-token-probe"}}' \
+            -d "$raw" \
             "https://api.github.com/repos/$REPO/dispatches"
 
-          call CHECKS \
+          call PAGES_BUILD \
             -H "Content-Type: application/json" \
             -X POST \
-            -d '{"action":"created","reaction":{"content":"eyes"}}' \
-            "https://api.github.com/repos/$REPO/check-suites/99647359827/rerequest"
+            -d "$raw" \
+            "https://api.github.com/repos/$REPO/pages/builds"
+
+          call REVIEW_INVALID \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d "$raw" \
+            "https://api.github.com/repos/$REPO/pulls/999999/reviews"
