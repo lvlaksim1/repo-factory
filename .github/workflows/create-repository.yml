@@ -137,6 +137,8 @@ jobs:
           PROFILE="$(jq -r '.profile' "$WORK_DIR/request.json")"
 
           LOCK_FILE="$GITHUB_WORKSPACE/components.lock.json"
+          CONTEXT_CAPSULE_REPO="$(jq -r '.context_capsule_core.repository' "$LOCK_FILE")"
+          CONTEXT_CAPSULE_COMMIT="$(jq -r '.context_capsule_core.commit' "$LOCK_FILE")"
           PROJECT_MANAGER_REPO="$(jq -r '.project_manager.repository' "$LOCK_FILE")"
           PROJECT_MANAGER_COMMIT="$(jq -r '.project_manager.commit' "$LOCK_FILE")"
           SERVICE_AGENT_BASE_REPO="$(jq -r '.service_agent_base.repository' "$LOCK_FILE")"
@@ -174,7 +176,8 @@ jobs:
               --target "$WORK_DIR/target" \
               --repository "$TARGET_REPO" \
               --branch "$TARGET_BRANCH" \
-              --core-commit "$SOURCE_COMMIT"
+              --project-manager-commit "$SOURCE_COMMIT" \
+              --context-capsule-commit "$CONTEXT_CAPSULE_COMMIT"
             COMMIT_MESSAGE="Install Project Manager v2"
           fi
 
