@@ -123,7 +123,7 @@ jobs:
           TARGET_REPO: ${{ steps.create.outputs.full_name }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           SERVICE_AGENT_BASE_COMMIT: 7aa1e697504e686b02a4d7f1539a157214d5e692
-          PROJECT_MANAGER_COMMIT: 2de524c15a5489d5b205a36c99c493f3c4de2180
+          PROJECT_MANAGER_COMMIT: 0544517c14e115a70e40d1324d1e594035971eaa
         shell: bash
         run: |
           set -euo pipefail
