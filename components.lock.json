@@ -2,8 +2,8 @@
   "schema_version": 2,
   "project_manager": {
     "repository": "lvlaksim1/context-capsule-project-manager",
-    "commit": "5c00785c19af132267e20d55a47c634fea477bfa",
-    "verification": "Project Manager CI after structured provenance parser + legacy normalizer: tests + compile + CLI + VALID + READY + recover SUCCESS"
+    "commit": "fe30cb702425cd345b3ca1e099ccbdb872b267f5",
+    "verification": "Project Manager CI after structured provenance parser, legacy normalizer and template-detection fixes: tests + compile + CLI + VALID + READY + recover SUCCESS"
   },
   "service_agent_base": {
     "repository": "lvlaksim1/service-agent-base",
