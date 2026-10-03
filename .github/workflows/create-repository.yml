@@ -14,6 +14,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
       - name: Validate and create repository
         id: create
         env:
@@ -122,8 +126,6 @@ jobs:
           GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
           TARGET_REPO: ${{ steps.create.outputs.full_name }}
           ISSUE_BODY: ${{ github.event.issue.body }}
-          SERVICE_AGENT_BASE_COMMIT: 7aa1e697504e686b02a4d7f1539a157214d5e692
-          PROJECT_MANAGER_COMMIT: 0544517c14e115a70e40d1324d1e594035971eaa
         shell: bash
         run: |
           set -euo pipefail
@@ -134,6 +136,12 @@ jobs:
           printf '%s' "$ISSUE_BODY" > "$WORK_DIR/request.json"
           PROFILE="$(jq -r '.profile' "$WORK_DIR/request.json")"
 
+          LOCK_FILE="$GITHUB_WORKSPACE/components.lock.json"
+          PROJECT_MANAGER_REPO="$(jq -r '.project_manager.repository' "$LOCK_FILE")"
+          PROJECT_MANAGER_COMMIT="$(jq -r '.project_manager.commit' "$LOCK_FILE")"
+          SERVICE_AGENT_BASE_REPO="$(jq -r '.service_agent_base.repository' "$LOCK_FILE")"
+          SERVICE_AGENT_BASE_COMMIT="$(jq -r '.service_agent_base.commit' "$LOCK_FILE")"
+
           gh auth setup-git >/dev/null
           gh repo clone "$TARGET_REPO" "$WORK_DIR/target" -- --depth=1 >/dev/null
 
@@ -141,7 +149,7 @@ jobs:
 
           if [ "$PROFILE" = "service-agent" ]; then
             SOURCE_COMMIT="$SERVICE_AGENT_BASE_COMMIT"
-            git clone --quiet https://github.com/lvlaksim1/context-capsule.git "$WORK_DIR/service-agent-base"
+            git clone --quiet "https://github.com/$SERVICE_AGENT_BASE_REPO.git" "$WORK_DIR/service-agent-base"
             git -C "$WORK_DIR/service-agent-base" checkout --quiet --detach "$SOURCE_COMMIT"
 
             AGENT_ID="$(jq -r '.agent_id' "$WORK_DIR/request.json")"
@@ -159,7 +167,7 @@ jobs:
             COMMIT_MESSAGE="Install Service Agent Base"
           else
             SOURCE_COMMIT="$PROJECT_MANAGER_COMMIT"
-            git clone --quiet https://github.com/lvlaksim1/context-capsule-project-manager.git "$WORK_DIR/project-manager"
+            git clone --quiet "https://github.com/$PROJECT_MANAGER_REPO.git" "$WORK_DIR/project-manager"
             git -C "$WORK_DIR/project-manager" checkout --quiet --detach "$SOURCE_COMMIT"
 
             python "$WORK_DIR/project-manager/installer/pmctl.py" install \
