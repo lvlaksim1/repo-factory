@@ -32,11 +32,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          jq -e '.schema_version == 1' components.lock.json >/dev/null
+          jq -e '.schema_version == 2' components.lock.json >/dev/null
+          jq -e -r '.context_capsule_core.repository' components.lock.json >/dev/null
           jq -e -r '.project_manager.repository' components.lock.json >/dev/null
           jq -e -r '.service_agent_base.repository' components.lock.json >/dev/null
+          CORE_SHA="$(jq -r '.context_capsule_core.commit' components.lock.json)"
           PM_SHA="$(jq -r '.project_manager.commit' components.lock.json)"
           SA_SHA="$(jq -r '.service_agent_base.commit' components.lock.json)"
+          [[ "$CORE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$PM_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$SA_SHA" =~ ^[0-9a-f]{40}$ ]]
 
@@ -44,8 +47,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          CORE_REPO="$(jq -r '.context_capsule_core.repository' components.lock.json)"
+          CORE_SHA="$(jq -r '.context_capsule_core.commit' components.lock.json)"
           PM_REPO="$(jq -r '.project_manager.repository' components.lock.json)"
           PM_SHA="$(jq -r '.project_manager.commit' components.lock.json)"
+
+          git clone --quiet "https://github.com/$CORE_REPO.git" /tmp/context-capsule-core
+          git -C /tmp/context-capsule-core checkout --quiet --detach "$CORE_SHA"
+          test -f /tmp/context-capsule-core/schemas/capsule.schema.json
 
           git clone --quiet "https://github.com/$PM_REPO.git" /tmp/project-manager
           git -C /tmp/project-manager checkout --quiet --detach "$PM_SHA"
@@ -57,11 +66,21 @@ jobs:
             --target /tmp/pm-target \
             --repository lvlaksim1/repo-factory-smoke \
             --branch main \
-            --core-commit "$PM_SHA"
+            --project-manager-commit "$PM_SHA" \
+            --context-capsule-commit "$CORE_SHA"
 
           python /tmp/project-manager/installer/pmctl.py validate --target /tmp/pm-target
           test -f /tmp/pm-target/.context/manager/CONTRACT.md
           test -f /tmp/pm-target/.context/manager/identity.json
+          jq -e --arg core "$CORE_SHA" --arg pm "$PM_SHA" '
+            .provenance.context_capsule.repository == "lvlaksim1/context-capsule"
+            and .provenance.context_capsule.commit == $core
+            and .provenance.project_manager.repository == "lvlaksim1/context-capsule-project-manager"
+            and .provenance.project_manager.commit == $pm
+            and .context_capsule_commit == $core
+            and .project_manager_commit == $pm
+            and .core_commit == $pm
+          ' /tmp/pm-target/.context/capsule.json >/dev/null
 
       - name: Service Agent Base install contract
         shell: bash
