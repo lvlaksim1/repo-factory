@@ -21,7 +21,7 @@
 }
 ```
 
-Фабрика создаёт репозиторий и выполняет clean install актуального Project Manager v2 из закреплённого Context Capsule Core.
+Фабрика создаёт репозиторий и выполняет clean install закреплённого Project Manager v2 из отдельного источника `lvlaksim1/context-capsule-project-manager`.
 
 ### Репозиторий Service Agent
 
@@ -60,15 +60,16 @@
 
 Профиль `infrastructure` создаёт обычный репозиторий без Context Capsule и без агентской идентичности. Он предназначен для общих очередей, реестров, control-plane state и другой инфраструктуры, которая сама не является Project Manager или Service Agent.
 
-## Context Capsule policy
+## Component source policy
 
-Агентские профили устанавливаются из одного закреплённого актуального v2 Core:
+Агентские профили имеют раздельные закреплённые источники:
 
-- `project-manager` → `capsulectl.py install`
-- `service-agent` → `capsulectl.py service-install`
-- `infrastructure` → Context Capsule не устанавливается
+- `project-manager` → `lvlaksim1/context-capsule-project-manager` → `pmctl.py install`;
+- `service-agent` → временно закреплённый Service Agent Base из `lvlaksim1/context-capsule`;
+- `infrastructure` → агентская идентичность и Context Capsule не устанавливаются.
 
-Поле `profile` обязательно; профиль всегда задаётся явно. Инфраструктурный профиль не создаёт ложную agent identity.
+Таким образом, Project Manager больше не берётся из ветки `context-capsule:v2-manager-runtime`.
+Каждый источник закрепляется точным immutable commit SHA. Поле `profile` обязательно; профиль всегда задаётся явно.
 
 ## Стандартные Telegram secrets
 
