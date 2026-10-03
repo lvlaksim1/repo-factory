@@ -71,10 +71,12 @@ jobs:
 
           WORK="$(mktemp -d)"
           trap 'rm -rf "$WORK"' EXIT
+          trap 'rc=$?; echo "status=failed" >> "$GITHUB_OUTPUT"; echo "message=Migration command failed with exit $rc; inspect workflow logs" >> "$GITHUB_OUTPUT"' ERR
 
           gh auth setup-git >/dev/null
           gh repo clone "$TARGET_REPO" "$WORK/target" -- --depth=1 >/dev/null
-          git -C "$WORK/target" fetch --quiet origin "$BRANCH"
+          git -C "$WORK/target" fetch --quiet --depth=1 origin \
+            "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
           git -C "$WORK/target" checkout --quiet -B "$BRANCH" "origin/$BRANCH"
 
           BEFORE="$(git -C "$WORK/target" rev-parse HEAD)"
@@ -98,6 +100,10 @@ jobs:
             --branch "$BRANCH" \
             --project-manager-commit "$PM_SHA" \
             --context-capsule-commit "$CORE_SHA"
+
+          python "$WORK/project-manager/installer/pmctl.py" normalize-legacy-provenance \
+            --target "$WORK/target" \
+            --branch "$BRANCH"
 
           python "$WORK/project-manager/installer/pmctl.py" validate --target "$WORK/target"
           python "$WORK/project-manager/installer/pmctl.py" ready \
