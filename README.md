@@ -21,7 +21,7 @@
 }
 ```
 
-Фабрика создаёт репозиторий и выполняет clean install закреплённого Project Manager v2 из отдельного источника `lvlaksim1/context-capsule-project-manager`.
+Фабрика создаёт репозиторий и выполняет clean install закреплённого Project Manager v2 из отдельного источника `lvlaksim1/context-capsule-project-manager`, передавая ему отдельные immutable provenance pins для Project Manager и Context Capsule Core.
 
 ### Репозиторий Service Agent
 
@@ -64,9 +64,14 @@
 
 Агентские профили имеют раздельные закреплённые источники:
 
+- Context Capsule Core compatibility → `lvlaksim1/context-capsule`;
 - `project-manager` → `lvlaksim1/context-capsule-project-manager` → `pmctl.py install`;
 - `service-agent` → `lvlaksim1/service-agent-base` → `servicectl.py install`;
 - `infrastructure` → агентская идентичность и Context Capsule не устанавливаются.
+
+Для профиля `project-manager` фабрика передаёт в `pmctl.py` два разных SHA:
+`--context-capsule-commit` для Core и `--project-manager-commit` для PM. Исторический
+`--core-commit` больше не используется фабрикой.
 
 Таким образом, ни Project Manager, ни Service Agent Base больше не берутся из исторической ветки `context-capsule:v2-manager-runtime`.
 Каждый источник закрепляется точным immutable commit SHA в `components.lock.json`. Этот файл является единственным каноническим distribution lock; workflow читает repository/commit только из него.
@@ -242,8 +247,9 @@ Telegram-related secrets нужны только для соответствую
 
 `components.lock.json` — единственный источник истины для версий компонентов, устанавливаемых фабрикой.
 
-В lock отдельно закрепляются:
+В lock schema v2 отдельно закрепляются:
+- Context Capsule Core — repository + exact immutable commit;
 - Project Manager — repository + exact immutable commit;
 - Service Agent Base — repository + exact immutable commit.
 
-`Component Contract Smoke` клонирует именно эти SHA и выполняет временную установку/валидацию обоих профилей без создания тестовых репозиториев.
+`Component Contract Smoke` проверяет существование всех трёх immutable SHA, выполняет временную установку Project Manager с раздельными provenance coordinates и валидирует оба агентских профиля без создания тестовых репозиториев.

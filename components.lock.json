@@ -1,14 +1,19 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "project_manager": {
     "repository": "lvlaksim1/context-capsule-project-manager",
-    "commit": "1b90f1739c91e1ed83c3f903d3f1024f37340607",
-    "verification": "Project Manager CI run 37159227284: tests + compile + CLI smoke + VALID + READY + recover SUCCESS"
+    "commit": "640baaab51c7bfda8090e584a24c9067f6ec3c06",
+    "verification": "Project Manager provenance split PR #1 CI: tests + compile + CLI smoke + VALID + READY + recover SUCCESS"
   },
   "service_agent_base": {
     "repository": "lvlaksim1/service-agent-base",
     "commit": "163688088347f67371adb2958af5aa25a1ad7be5",
     "verification": "Service Agent Base CI run 37159389393: unit tests + compile + CLI + install contract SUCCESS"
   },
-  "policy": "All component sources are exact immutable commit SHAs; factory changes must pass component contract smoke."
+  "policy": "All component sources are exact immutable commit SHAs; Project Manager installations receive separate Core and PM provenance pins; factory changes must pass component contract smoke.",
+  "context_capsule_core": {
+    "repository": "lvlaksim1/context-capsule",
+    "commit": "2ef41a5ed57ae514cc5980065560d7e55d5e4b9a",
+    "verification": "Canonical Context Capsule Core v1.3.1 release commit"
+  }
 }
