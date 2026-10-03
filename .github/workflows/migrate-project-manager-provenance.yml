@@ -109,10 +109,14 @@ jobs:
           python "$WORK/project-manager/installer/pmctl.py" ready \
             --target "$WORK/target" \
             --expected-manager-ref "$BEFORE"
-          python "$WORK/project-manager/installer/pmctl.py" recover \
+          if ! python "$WORK/project-manager/installer/pmctl.py" recover \
             --target "$WORK/target" \
             --expected-manager-ref "$BEFORE" \
-            --max-chars 65536 > "$WORK/recovery.txt"
+            --max-chars 65536 > "$WORK/recovery.txt"; then
+            echo "Project Manager recover failed:" >&2
+            cat "$WORK/recovery.txt" >&2
+            exit 1
+          fi
           test -s "$WORK/recovery.txt"
 
           jq -e --arg core_repo "$CORE_REPO" --arg core "$CORE_SHA" --arg pm_repo "$PM_REPO" --arg pm "$PM_SHA" '
