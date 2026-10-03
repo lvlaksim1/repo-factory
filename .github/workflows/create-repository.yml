@@ -122,7 +122,8 @@ jobs:
           GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
           TARGET_REPO: ${{ steps.create.outputs.full_name }}
           ISSUE_BODY: ${{ github.event.issue.body }}
-          CONTEXT_CAPSULE_CORE_COMMIT: 7aa1e697504e686b02a4d7f1539a157214d5e692
+          SERVICE_AGENT_BASE_COMMIT: 7aa1e697504e686b02a4d7f1539a157214d5e692
+          PROJECT_MANAGER_COMMIT: 2de524c15a5489d5b205a36c99c493f3c4de2180
         shell: bash
         run: |
           set -euo pipefail
@@ -132,10 +133,6 @@ jobs:
 
           printf '%s' "$ISSUE_BODY" > "$WORK_DIR/request.json"
           PROFILE="$(jq -r '.profile' "$WORK_DIR/request.json")"
-          CORE_COMMIT="$CONTEXT_CAPSULE_CORE_COMMIT"
-
-          git clone --quiet https://github.com/lvlaksim1/context-capsule.git "$WORK_DIR/context-capsule"
-          git -C "$WORK_DIR/context-capsule" checkout --quiet --detach "$CORE_COMMIT"
 
           gh auth setup-git >/dev/null
           gh repo clone "$TARGET_REPO" "$WORK_DIR/target" -- --depth=1 >/dev/null
@@ -143,25 +140,33 @@ jobs:
           TARGET_BRANCH="$(git -C "$WORK_DIR/target" branch --show-current)"
 
           if [ "$PROFILE" = "service-agent" ]; then
+            SOURCE_COMMIT="$SERVICE_AGENT_BASE_COMMIT"
+            git clone --quiet https://github.com/lvlaksim1/context-capsule.git "$WORK_DIR/service-agent-base"
+            git -C "$WORK_DIR/service-agent-base" checkout --quiet --detach "$SOURCE_COMMIT"
+
             AGENT_ID="$(jq -r '.agent_id' "$WORK_DIR/request.json")"
             ROLE="$(jq -r '.role' "$WORK_DIR/request.json")"
             SPECIALIZATION="$(jq -r '.specialization' "$WORK_DIR/request.json")"
 
-            python "$WORK_DIR/context-capsule/installer/capsulectl.py" service-install \
+            python "$WORK_DIR/service-agent-base/installer/capsulectl.py" service-install \
               --target "$WORK_DIR/target" \
               --repository "$TARGET_REPO" \
               --branch "$TARGET_BRANCH" \
               --agent-id "$AGENT_ID" \
               --role "$ROLE" \
               --specialization "$SPECIALIZATION" \
-              --core-commit "$CORE_COMMIT"
+              --core-commit "$SOURCE_COMMIT"
             COMMIT_MESSAGE="Install Service Agent Base"
           else
-            python "$WORK_DIR/context-capsule/installer/capsulectl.py" install \
+            SOURCE_COMMIT="$PROJECT_MANAGER_COMMIT"
+            git clone --quiet https://github.com/lvlaksim1/context-capsule-project-manager.git "$WORK_DIR/project-manager"
+            git -C "$WORK_DIR/project-manager" checkout --quiet --detach "$SOURCE_COMMIT"
+
+            python "$WORK_DIR/project-manager/installer/pmctl.py" install \
               --target "$WORK_DIR/target" \
               --repository "$TARGET_REPO" \
               --branch "$TARGET_BRANCH" \
-              --core-commit "$CORE_COMMIT"
+              --core-commit "$SOURCE_COMMIT"
             COMMIT_MESSAGE="Install Project Manager v2"
           fi
 
