@@ -156,14 +156,14 @@ jobs:
             ROLE="$(jq -r '.role' "$WORK_DIR/request.json")"
             SPECIALIZATION="$(jq -r '.specialization' "$WORK_DIR/request.json")"
 
-            python "$WORK_DIR/service-agent-base/installer/capsulectl.py" service-install \
+            python "$WORK_DIR/service-agent-base/installer/servicectl.py" install \
               --target "$WORK_DIR/target" \
               --repository "$TARGET_REPO" \
               --branch "$TARGET_BRANCH" \
               --agent-id "$AGENT_ID" \
               --role "$ROLE" \
               --specialization "$SPECIALIZATION" \
-              --core-commit "$SOURCE_COMMIT"
+              --source-commit "$SOURCE_COMMIT"
             COMMIT_MESSAGE="Install Service Agent Base"
           else
             SOURCE_COMMIT="$PROJECT_MANAGER_COMMIT"
