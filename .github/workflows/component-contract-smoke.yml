@@ -1,0 +1,89 @@
+name: Component Contract Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - components.lock.json
+      - .github/workflows/create-repository.yml
+      - .github/workflows/component-contract-smoke.yml
+  pull_request:
+    paths:
+      - components.lock.json
+      - .github/workflows/create-repository.yml
+      - .github/workflows/component-contract-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Validate lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '.schema_version == 1' components.lock.json >/dev/null
+          jq -e -r '.project_manager.repository' components.lock.json >/dev/null
+          jq -e -r '.service_agent_base.repository' components.lock.json >/dev/null
+          PM_SHA="$(jq -r '.project_manager.commit' components.lock.json)"
+          SA_SHA="$(jq -r '.service_agent_base.commit' components.lock.json)"
+          [[ "$PM_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SA_SHA" =~ ^[0-9a-f]{40}$ ]]
+
+      - name: Project Manager install contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          PM_REPO="$(jq -r '.project_manager.repository' components.lock.json)"
+          PM_SHA="$(jq -r '.project_manager.commit' components.lock.json)"
+
+          git clone --quiet "https://github.com/$PM_REPO.git" /tmp/project-manager
+          git -C /tmp/project-manager checkout --quiet --detach "$PM_SHA"
+
+          git init -q -b main /tmp/pm-target
+          printf '# Smoke target\n' > /tmp/pm-target/README.md
+
+          python /tmp/project-manager/installer/pmctl.py install \
+            --target /tmp/pm-target \
+            --repository lvlaksim1/repo-factory-smoke \
+            --branch main \
+            --core-commit "$PM_SHA"
+
+          python /tmp/project-manager/installer/pmctl.py validate --target /tmp/pm-target
+          test -f /tmp/pm-target/.context/manager/CONTRACT.md
+          test -f /tmp/pm-target/.context/manager/identity.json
+
+      - name: Service Agent Base install contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          SA_REPO="$(jq -r '.service_agent_base.repository' components.lock.json)"
+          SA_SHA="$(jq -r '.service_agent_base.commit' components.lock.json)"
+
+          git clone --quiet "https://github.com/$SA_REPO.git" /tmp/service-agent-base
+          git -C /tmp/service-agent-base checkout --quiet --detach "$SA_SHA"
+
+          git init -q -b main /tmp/service-target
+          printf '# Service smoke target\n' > /tmp/service-target/README.md
+
+          python /tmp/service-agent-base/installer/capsulectl.py service-install \
+            --target /tmp/service-target \
+            --repository lvlaksim1/repo-factory-service-smoke \
+            --branch main \
+            --agent-id repo-factory-service-smoke \
+            --role "Service Agent" \
+            --specialization "Component contract smoke" \
+            --core-commit "$SA_SHA"
+
+          python /tmp/service-agent-base/installer/capsulectl.py service-validate --target /tmp/service-target
+          test -f /tmp/service-target/.context/service-agent/CONTRACT.md
