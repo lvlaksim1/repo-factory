@@ -112,7 +112,7 @@ jobs:
           if ! python "$WORK/project-manager/installer/pmctl.py" recover \
             --target "$WORK/target" \
             --expected-manager-ref "$BEFORE" \
-            --max-chars 65536 > "$WORK/recovery.txt"; then
+            --max-chars 131072 > "$WORK/recovery.txt"; then
             echo "Project Manager recover failed:" >&2
             cat "$WORK/recovery.txt" >&2
             exit 1
