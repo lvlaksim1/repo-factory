@@ -6,9 +6,9 @@
     "verification": "Project Manager CI run 37159227284: tests + compile + CLI smoke + VALID + READY + recover SUCCESS"
   },
   "service_agent_base": {
-    "repository": "lvlaksim1/context-capsule",
-    "commit": "7aa1e697504e686b02a4d7f1539a157214d5e692",
-    "status": "legacy combined-source pin pending separate Service Agent Base extraction"
+    "repository": "lvlaksim1/service-agent-base",
+    "commit": "163688088347f67371adb2958af5aa25a1ad7be5",
+    "verification": "Service Agent Base CI run 37159389393: unit tests + compile + CLI + install contract SUCCESS"
   },
   "policy": "All component sources are exact immutable commit SHAs; factory changes must pass component contract smoke."
 }
