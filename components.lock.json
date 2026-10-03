@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "project_manager": {
+    "repository": "lvlaksim1/context-capsule-project-manager",
+    "commit": "0544517c14e115a70e40d1324d1e594035971eaa",
+    "verification": "Project Manager CI success"
+  },
+  "service_agent_base": {
+    "repository": "lvlaksim1/context-capsule",
+    "commit": "7aa1e697504e686b02a4d7f1539a157214d5e692",
+    "status": "legacy combined-source pin pending separate Service Agent Base extraction"
+  }
+}
