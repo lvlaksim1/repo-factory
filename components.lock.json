@@ -2,8 +2,8 @@
   "schema_version": 2,
   "project_manager": {
     "repository": "lvlaksim1/context-capsule-project-manager",
-    "commit": "640baaab51c7bfda8090e584a24c9067f6ec3c06",
-    "verification": "Project Manager provenance split PR #1 CI: tests + compile + CLI smoke + VALID + READY + recover SUCCESS"
+    "commit": "5c00785c19af132267e20d55a47c634fea477bfa",
+    "verification": "Project Manager CI after structured provenance parser + legacy normalizer: tests + compile + CLI + VALID + READY + recover SUCCESS"
   },
   "service_agent_base": {
     "repository": "lvlaksim1/service-agent-base",
