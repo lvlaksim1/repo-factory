@@ -1,0 +1,129 @@
+name: Migrate Service Agent Base
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  migrate:
+    if: github.event.issue.user.login == 'lvlaksim1' && github.event.issue.title == '[MIGRATE_SERVICE_AGENT_BASE]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Migrate target
+        id: migrate
+        env:
+          GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$ISSUE_BODY" > /tmp/request.json
+
+          if ! jq -e . /tmp/request.json >/dev/null 2>&1; then
+            echo "status=invalid" >> "$GITHUB_OUTPUT"
+            echo "message=Issue body must be valid JSON" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          NAME="$(jq -r '.name // empty' /tmp/request.json)"
+          case "$NAME" in
+            supervisor|project-manager-auditor) ;;
+            *)
+              echo "status=invalid" >> "$GITHUB_OUTPUT"
+              echo "message=Target is not an approved system Service Agent" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+
+          TARGET_REPO="lvlaksim1/$NAME"
+          BASE_REPO="$(jq -r '.service_agent_base.repository' components.lock.json)"
+          BASE_SHA="$(jq -r '.service_agent_base.commit' components.lock.json)"
+
+          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+
+          WORK="$(mktemp -d)"
+          trap 'rm -rf "$WORK"' EXIT
+
+          gh auth setup-git >/dev/null
+          gh repo clone "$TARGET_REPO" "$WORK/target" -- --depth=1 >/dev/null
+          git clone --quiet "https://github.com/$BASE_REPO.git" "$WORK/base"
+          git -C "$WORK/base" checkout --quiet --detach "$BASE_SHA"
+
+          BRANCH="$(git -C "$WORK/target" branch --show-current)"
+          if [ "$BRANCH" != "main" ]; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "message=Expected target branch main, got $BRANCH" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BEFORE="$(git -C "$WORK/target" rev-parse HEAD)"
+
+          python "$WORK/base/installer/servicectl.py" repair \
+            --target "$WORK/target" \
+            --repository "$TARGET_REPO" \
+            --branch main \
+            --source-commit "$BASE_SHA"
+
+          python "$WORK/base/installer/servicectl.py" validate --target "$WORK/target"
+          python "$WORK/base/installer/servicectl.py" ready --target "$WORK/target"
+          python "$WORK/base/installer/servicectl.py" recover --target "$WORK/target" --max-chars 65536 > "$WORK/recovery.txt"
+          test -s "$WORK/recovery.txt"
+
+          EXPECTED_AGENT_ID="$NAME"
+          if [ "$NAME" = "supervisor" ]; then
+            EXPECTED_AGENT_ID="ecosystem-supervisor"
+          fi
+          grep -q "Agent ID: $EXPECTED_AGENT_ID" "$WORK/recovery.txt"
+
+          git -C "$WORK/target" config user.name "repo-factory"
+          git -C "$WORK/target" config user.email "repo-factory@users.noreply.github.com"
+          git -C "$WORK/target" add -A
+
+          if git -C "$WORK/target" diff --cached --quiet; then
+            AFTER="$BEFORE"
+            CHANGED="false"
+          else
+            git -C "$WORK/target" commit --quiet -m "Migrate to separated Service Agent Base"
+            AFTER="$(git -C "$WORK/target" rev-parse HEAD)"
+            git -C "$WORK/target" push --quiet origin HEAD:main
+            CHANGED="true"
+          fi
+
+          echo "status=success" >> "$GITHUB_OUTPUT"
+          echo "target=$TARGET_REPO" >> "$GITHUB_OUTPUT"
+          echo "before=$BEFORE" >> "$GITHUB_OUTPUT"
+          echo "after=$AFTER" >> "$GITHUB_OUTPUT"
+          echo "base_repo=$BASE_REPO" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "changed=$CHANGED" >> "$GITHUB_OUTPUT"
+
+      - name: Report result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          STATUS: ${{ steps.migrate.outputs.status }}
+          MESSAGE: ${{ steps.migrate.outputs.message }}
+          TARGET: ${{ steps.migrate.outputs.target }}
+          BEFORE: ${{ steps.migrate.outputs.before }}
+          AFTER: ${{ steps.migrate.outputs.after }}
+          BASE_REPO: ${{ steps.migrate.outputs.base_repo }}
+          BASE_SHA: ${{ steps.migrate.outputs.base_sha }}
+          CHANGED: ${{ steps.migrate.outputs.changed }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$STATUS" = "success" ]; then
+            BODY="MIGRATION_OK: $TARGET"$'\n'"BEFORE: $BEFORE"$'\n'"AFTER: $AFTER"$'\n'"SERVICE_AGENT_BASE: $BASE_REPO@$BASE_SHA"$'\n'"CHANGED: $CHANGED"$'\n'"VALID/READY/RECOVER: PASS"
+          else
+            BODY="MIGRATION_FAILED: ${MESSAGE:-workflow failure}"
+          fi
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" -f body="$BODY"
