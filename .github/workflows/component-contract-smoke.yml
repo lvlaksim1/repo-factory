@@ -76,14 +76,14 @@ jobs:
           git init -q -b main /tmp/service-target
           printf '# Service smoke target\n' > /tmp/service-target/README.md
 
-          python /tmp/service-agent-base/installer/capsulectl.py service-install \
+          python /tmp/service-agent-base/installer/servicectl.py install \
             --target /tmp/service-target \
             --repository lvlaksim1/repo-factory-service-smoke \
             --branch main \
             --agent-id repo-factory-service-smoke \
             --role "Service Agent" \
             --specialization "Component contract smoke" \
-            --core-commit "$SA_SHA"
+            --source-commit "$SA_SHA"
 
-          python /tmp/service-agent-base/installer/capsulectl.py service-validate --target /tmp/service-target
+          python /tmp/service-agent-base/installer/servicectl.py validate --target /tmp/service-target
           test -f /tmp/service-target/.context/service-agent/CONTRACT.md
