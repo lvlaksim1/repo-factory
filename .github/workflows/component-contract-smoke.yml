@@ -7,11 +7,13 @@ on:
       - components.lock.json
       - .github/workflows/create-repository.yml
       - .github/workflows/component-contract-smoke.yml
+      - .github/workflows/migrate-project-manager-provenance.yml
   pull_request:
     paths:
       - components.lock.json
       - .github/workflows/create-repository.yml
       - .github/workflows/component-contract-smoke.yml
+      - .github/workflows/migrate-project-manager-provenance.yml
 
 permissions:
   contents: read

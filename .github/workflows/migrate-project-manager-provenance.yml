@@ -1,0 +1,171 @@
+name: Migrate Project Manager Provenance
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  migrate:
+    if: github.event.issue.user.login == 'lvlaksim1' && github.event.issue.title == '[MIGRATE_PROJECT_MANAGER_PROVENANCE]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Migrate target
+        id: migrate
+        env:
+          GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$ISSUE_BODY" > /tmp/request.json
+
+          if ! jq -e . /tmp/request.json >/dev/null 2>&1; then
+            echo "status=invalid" >> "$GITHUB_OUTPUT"
+            echo "message=Issue body must be valid JSON" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          NAME="$(jq -r '.name // empty' /tmp/request.json)"
+          BRANCH="$(jq -r '.branch // "main"' /tmp/request.json)"
+          EXPECTED_HEAD="$(jq -r '.expected_head // empty' /tmp/request.json)"
+
+          if [[ ! "$NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "status=invalid" >> "$GITHUB_OUTPUT"
+            echo "message=Invalid repository name" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ ! "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]] || [[ "$BRANCH" == *".."* ]]; then
+            echo "status=invalid" >> "$GITHUB_OUTPUT"
+            echo "message=Invalid branch name" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ ! "$EXPECTED_HEAD" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "status=invalid" >> "$GITHUB_OUTPUT"
+            echo "message=expected_head must be an exact 40-character commit SHA" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          TARGET_REPO="lvlaksim1/$NAME"
+          LOCK_SCHEMA="$(jq -r '.schema_version' components.lock.json)"
+          CORE_REPO="$(jq -r '.context_capsule_core.repository' components.lock.json)"
+          CORE_SHA="$(jq -r '.context_capsule_core.commit' components.lock.json)"
+          PM_REPO="$(jq -r '.project_manager.repository' components.lock.json)"
+          PM_SHA="$(jq -r '.project_manager.commit' components.lock.json)"
+
+          if [ "$LOCK_SCHEMA" != "2" ]; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "message=components.lock.json schema_version must be 2" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          [[ "$CORE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PM_SHA" =~ ^[0-9a-f]{40}$ ]]
+
+          WORK="$(mktemp -d)"
+          trap 'rm -rf "$WORK"' EXIT
+
+          gh auth setup-git >/dev/null
+          gh repo clone "$TARGET_REPO" "$WORK/target" -- --depth=1 >/dev/null
+          git -C "$WORK/target" fetch --quiet origin "$BRANCH"
+          git -C "$WORK/target" checkout --quiet -B "$BRANCH" "origin/$BRANCH"
+
+          BEFORE="$(git -C "$WORK/target" rev-parse HEAD)"
+          if [ "$BEFORE" != "$EXPECTED_HEAD" ]; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "message=Target branch moved: expected $EXPECTED_HEAD, actual $BEFORE" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          test -f "$WORK/target/.context/capsule.json"
+          test -f "$WORK/target/.context/manifest.json"
+          test -f "$WORK/target/.context/manager/identity.json"
+          jq -e '.version == "2.0.0-dev"' "$WORK/target/.context/capsule.json" >/dev/null
+
+          git clone --quiet "https://github.com/$PM_REPO.git" "$WORK/project-manager"
+          git -C "$WORK/project-manager" checkout --quiet --detach "$PM_SHA"
+
+          python "$WORK/project-manager/installer/pmctl.py" repair \
+            --target "$WORK/target" \
+            --repository "$TARGET_REPO" \
+            --branch "$BRANCH" \
+            --project-manager-commit "$PM_SHA" \
+            --context-capsule-commit "$CORE_SHA"
+
+          python "$WORK/project-manager/installer/pmctl.py" validate --target "$WORK/target"
+          python "$WORK/project-manager/installer/pmctl.py" ready \
+            --target "$WORK/target" \
+            --expected-manager-ref "$BEFORE"
+          python "$WORK/project-manager/installer/pmctl.py" recover \
+            --target "$WORK/target" \
+            --expected-manager-ref "$BEFORE" \
+            --max-chars 65536 > "$WORK/recovery.txt"
+          test -s "$WORK/recovery.txt"
+
+          jq -e --arg core_repo "$CORE_REPO" --arg core "$CORE_SHA" --arg pm_repo "$PM_REPO" --arg pm "$PM_SHA" '
+            .provenance.context_capsule.repository == $core_repo
+            and .provenance.context_capsule.commit == $core
+            and .provenance.project_manager.repository == $pm_repo
+            and .provenance.project_manager.commit == $pm
+            and .context_capsule_commit == $core
+            and .project_manager_commit == $pm
+            and .core_commit == $pm
+          ' "$WORK/target/.context/capsule.json" >/dev/null
+
+          git -C "$WORK/target" config user.name "repo-factory"
+          git -C "$WORK/target" config user.email "repo-factory@users.noreply.github.com"
+          git -C "$WORK/target" add -A
+
+          if git -C "$WORK/target" diff --cached --quiet; then
+            AFTER="$BEFORE"
+            CHANGED="false"
+          else
+            git -C "$WORK/target" commit --quiet -m "Migrate Project Manager provenance"
+            AFTER="$(git -C "$WORK/target" rev-parse HEAD)"
+            git -C "$WORK/target" push --quiet origin "HEAD:$BRANCH"
+            CHANGED="true"
+          fi
+
+          echo "status=success" >> "$GITHUB_OUTPUT"
+          echo "target=$TARGET_REPO" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "before=$BEFORE" >> "$GITHUB_OUTPUT"
+          echo "after=$AFTER" >> "$GITHUB_OUTPUT"
+          echo "core_repo=$CORE_REPO" >> "$GITHUB_OUTPUT"
+          echo "core_sha=$CORE_SHA" >> "$GITHUB_OUTPUT"
+          echo "pm_repo=$PM_REPO" >> "$GITHUB_OUTPUT"
+          echo "pm_sha=$PM_SHA" >> "$GITHUB_OUTPUT"
+          echo "changed=$CHANGED" >> "$GITHUB_OUTPUT"
+
+      - name: Report result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          STATUS: ${{ steps.migrate.outputs.status }}
+          MESSAGE: ${{ steps.migrate.outputs.message }}
+          TARGET: ${{ steps.migrate.outputs.target }}
+          TARGET_BRANCH: ${{ steps.migrate.outputs.branch }}
+          BEFORE: ${{ steps.migrate.outputs.before }}
+          AFTER: ${{ steps.migrate.outputs.after }}
+          CORE_REPO: ${{ steps.migrate.outputs.core_repo }}
+          CORE_SHA: ${{ steps.migrate.outputs.core_sha }}
+          PM_REPO: ${{ steps.migrate.outputs.pm_repo }}
+          PM_SHA: ${{ steps.migrate.outputs.pm_sha }}
+          CHANGED: ${{ steps.migrate.outputs.changed }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$STATUS" = "success" ]; then
+            BODY="MIGRATION_OK: $TARGET@$TARGET_BRANCH"$'\n'"BEFORE: $BEFORE"$'\n'"AFTER: $AFTER"$'\n'"CONTEXT_CAPSULE_CORE: $CORE_REPO@$CORE_SHA"$'\n'"PROJECT_MANAGER: $PM_REPO@$PM_SHA"$'\n'"CHANGED: $CHANGED"$'\n'"VALID/READY/RECOVER: PASS"
+          else
+            BODY="MIGRATION_FAILED: ${MESSAGE:-workflow failure}"
+          fi
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" -f body="$BODY"

@@ -78,6 +78,38 @@
 
 Изменение component pin считается допустимым только после успешной CI самого компонента и успешного `Component Contract Smoke` фабрики. Поле `profile` обязательно; профиль всегда задаётся явно.
 
+## Миграция существующего Project Manager на split provenance
+
+Миграция существующих v2-репозиториев выполняется только явно, без массовой фоновой перезаписи.
+
+Создать Issue с точным заголовком:
+
+`[MIGRATE_PROJECT_MANAGER_PROVENANCE]`
+
+и телом:
+
+```json
+{
+  "name": "my-project",
+  "branch": "main",
+  "expected_head": "40-character-exact-current-commit-sha"
+}
+```
+
+`expected_head` обязателен и работает как optimistic concurrency guard: если указанная ветка
+успела измениться, миграция прекращается без push.
+
+Workflow:
+
+- берёт Core и Project Manager только из `components.lock.json`;
+- проверяет, что цель уже является Project Manager v2;
+- выполняет `pmctl.py repair` с отдельными `--context-capsule-commit` и
+  `--project-manager-commit`;
+- требует успешные `validate`, `ready` и `recover`;
+- проверяет итоговые provenance coordinates через `jq`;
+- публикует только обычный fast-forward commit в указанную ветку;
+- ничего не меняет, если репозиторий уже соответствует текущим pins.
+
 ## Стандартные Telegram secrets
 
 Поле `standard_secrets` опционально и по умолчанию равно `true`.
