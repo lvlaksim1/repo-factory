@@ -9,5 +9,6 @@
     "repository": "lvlaksim1/context-capsule",
     "commit": "7aa1e697504e686b02a4d7f1539a157214d5e692",
     "status": "legacy combined-source pin pending separate Service Agent Base extraction"
-  }
+  },
+  "policy": "All component sources are exact immutable commit SHAs; factory changes must pass component contract smoke."
 }
