@@ -44,7 +44,7 @@
 - `role`
 - `specialization`
 
-Фабрика выполняет clean install Minimal Service Agent Base.
+Фабрика выполняет clean install из отдельного закреплённого источника `lvlaksim1/service-agent-base`.
 
 ### Инфраструктурный репозиторий без агента
 
@@ -65,11 +65,13 @@
 Агентские профили имеют раздельные закреплённые источники:
 
 - `project-manager` → `lvlaksim1/context-capsule-project-manager` → `pmctl.py install`;
-- `service-agent` → временно закреплённый Service Agent Base из `lvlaksim1/context-capsule`;
+- `service-agent` → `lvlaksim1/service-agent-base` → `servicectl.py install`;
 - `infrastructure` → агентская идентичность и Context Capsule не устанавливаются.
 
-Таким образом, Project Manager больше не берётся из ветки `context-capsule:v2-manager-runtime`.
-Каждый источник закрепляется точным immutable commit SHA. Поле `profile` обязательно; профиль всегда задаётся явно.
+Таким образом, ни Project Manager, ни Service Agent Base больше не берутся из исторической ветки `context-capsule:v2-manager-runtime`.
+Каждый источник закрепляется точным immutable commit SHA в `components.lock.json`. Этот файл является единственным каноническим distribution lock; workflow читает repository/commit только из него.
+
+Изменение component pin считается допустимым только после успешной CI самого компонента и успешного `Component Contract Smoke` фабрики. Поле `profile` обязательно; профиль всегда задаётся явно.
 
 ## Стандартные Telegram secrets
 
@@ -234,3 +236,14 @@ Telegram-related secrets нужны только для соответствую
 ```
 
 Эти профили заменяют прежние приватные `ubuntu-latest` проверки: MAX выполняет статическую валидацию, а сайт устанавливает зависимости на Node 22 и выполняет production-сборку. Производственные секреты не передаются.
+
+
+## Component lock
+
+`components.lock.json` — единственный источник истины для версий компонентов, устанавливаемых фабрикой.
+
+В lock отдельно закрепляются:
+- Project Manager — repository + exact immutable commit;
+- Service Agent Base — repository + exact immutable commit.
+
+`Component Contract Smoke` клонирует именно эти SHA и выполняет временную установку/валидацию обоих профилей без создания тестовых репозиториев.
