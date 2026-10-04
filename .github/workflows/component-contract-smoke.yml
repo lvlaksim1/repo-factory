@@ -10,6 +10,7 @@ on:
       - .github/workflows/migrate-project-manager-provenance.yml
       - .github/workflows/migrate-context-capsule-core.yml
       - .github/workflows/upgrade-context-capsule-to-project-manager.yml
+      - scripts/bootstrap_project_manager_state.py
   pull_request:
     paths:
       - components.lock.json
@@ -18,6 +19,7 @@ on:
       - .github/workflows/migrate-project-manager-provenance.yml
       - .github/workflows/migrate-context-capsule-core.yml
       - .github/workflows/upgrade-context-capsule-to-project-manager.yml
+      - scripts/bootstrap_project_manager_state.py
 
 permissions:
   contents: read
@@ -102,6 +104,114 @@ jobs:
             and .project_manager_version == "2.0.0-dev"
             and .context_version == "2.0.0-dev"
           ' /tmp/pm-target/.context/manifest.json >/dev/null
+
+      - name: Standalone Capsule to Project Manager upgrade contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          CORE_REPO="$(jq -r '.context_capsule_core.repository' components.lock.json)"
+          CORE_SHA="$(jq -r '.context_capsule_core.commit' components.lock.json)"
+          PM_REPO="$(jq -r '.project_manager.repository' components.lock.json)"
+          PM_SHA="$(jq -r '.project_manager.commit' components.lock.json)"
+
+          test -d /tmp/context-capsule-core
+          test -d /tmp/project-manager
+
+          git init -q -b main /tmp/upgrade-target
+          printf '# Upgrade smoke target\n' > /tmp/upgrade-target/README.md
+
+          python /tmp/context-capsule-core/installer/capsulectl.py install \
+            --target /tmp/upgrade-target \
+            --repository lvlaksim1/repo-factory-upgrade-smoke \
+            --branch main \
+            --core-commit "$CORE_SHA"
+
+          cat > /tmp/upgrade-target/.context/project/identity.md <<'EOF'
+          # Project identity
+
+          This is the repo-factory standalone Capsule to Project Manager upgrade smoke target.
+          EOF
+          cat > /tmp/upgrade-target/.context/project/goals.md <<'EOF'
+          # Project goals
+
+          Verify explicit upgrade from stable Context Capsule Core v1.3.1 to a READY Project Manager.
+          EOF
+          cat > /tmp/upgrade-target/.context/project/architecture.md <<'EOF'
+          # Project architecture
+
+          Durable project context is repository-local and the Project Manager layer is added explicitly.
+          EOF
+          cat > /tmp/upgrade-target/.context/project/constraints.md <<'EOF'
+          # Project constraints
+
+          Preserve existing durable context and never silently expand Project Manager authority.
+          EOF
+          cat > /tmp/upgrade-target/.context/current/state.md <<'EOF'
+          # Current state
+
+          The standalone Capsule fixture is ready for an explicit Project Manager upgrade.
+          EOF
+          cat > /tmp/upgrade-target/.context/current/next.md <<'EOF'
+          # Next actions
+
+          Perform the guarded upgrade and prove VALID, READY and deterministic recovery.
+          EOF
+          cat > /tmp/upgrade-target/.context/rules/project-rules.md <<'EOF'
+          # Project rules
+
+          Require evidence before claiming the upgrade complete.
+          EOF
+
+          git -C /tmp/upgrade-target config user.name "repo-factory-smoke"
+          git -C /tmp/upgrade-target config user.email "repo-factory-smoke@users.noreply.github.com"
+          git -C /tmp/upgrade-target add -A
+          git -C /tmp/upgrade-target commit --quiet -m "Standalone Capsule baseline"
+          BEFORE="$(git -C /tmp/upgrade-target rev-parse HEAD)"
+
+          MANAGER_ID="$(python scripts/bootstrap_project_manager_state.py \
+            --target /tmp/upgrade-target \
+            --repository lvlaksim1/repo-factory-upgrade-smoke \
+            --name repo-factory-upgrade-smoke \
+            --manager-branch main \
+            --product-branch main \
+            --source-commit "$BEFORE" \
+            --core-repository "$CORE_REPO" \
+            --core-commit "$CORE_SHA" \
+            --pm-repository "$PM_REPO" \
+            --pm-commit "$PM_SHA")"
+          test "$MANAGER_ID" = "repo-factory-upgrade-smoke-project-manager"
+
+          python /tmp/project-manager/installer/pmctl.py upgrade \
+            --target /tmp/upgrade-target \
+            --repository lvlaksim1/repo-factory-upgrade-smoke \
+            --branch main \
+            --product-branch main \
+            --project-manager-commit "$PM_SHA" \
+            --context-capsule-commit "$CORE_SHA"
+
+          python /tmp/project-manager/installer/pmctl.py normalize-legacy-provenance \
+            --target /tmp/upgrade-target \
+            --branch main
+          python /tmp/project-manager/installer/pmctl.py validate --target /tmp/upgrade-target
+          python /tmp/project-manager/installer/pmctl.py ready \
+            --target /tmp/upgrade-target \
+            --expected-manager-ref "$BEFORE"
+          python /tmp/project-manager/installer/pmctl.py recover \
+            --target /tmp/upgrade-target \
+            --expected-manager-ref "$BEFORE" \
+            --max-chars 131072 > /tmp/upgrade-recovery.txt
+          test -s /tmp/upgrade-recovery.txt
+
+          jq -e --arg core "$CORE_SHA" --arg pm "$PM_SHA" '
+            .context_capsule.version == "1.3.1"
+            and .context_capsule.commit == $core
+            and .project_manager.version == "2.0.0-dev"
+            and .project_manager.commit == $pm
+          ' /tmp/upgrade-target/.context/capsule.json >/dev/null
+          jq -e '
+            .manager_id == "repo-factory-upgrade-smoke-project-manager"
+            and .role == "Project Manager"
+          ' /tmp/upgrade-target/.context/manager/identity.json >/dev/null
 
       - name: Service Agent Base install contract
         shell: bash
