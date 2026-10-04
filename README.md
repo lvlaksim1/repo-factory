@@ -230,6 +230,27 @@ fast-forward commit. При изменившемся `expected_head` запис�
 
 Она копирует только `CONSUMER_DISPATCH_TOKEN`.
 
+
+## Переименование существующего репозитория
+
+Переименование выполняется guarded-командой через Issue:
+
+`[RENAME_REPOSITORY]`
+
+Тело Issue:
+
+```json
+{
+  "old_name": "old-project",
+  "new_name": "new-project",
+  "expected_repository_id": 123456789,
+  "branch": "main",
+  "expected_head": "40-character-exact-current-commit-sha"
+}
+```
+
+Фабрика проверяет стабильный `repository_id`, точный `expected_head` и отсутствие конфликта целевого имени перед PATCH GitHub Repository API. Повторный запуск после уже выполненного rename идемпотентно подтверждает тот же `repository_id` и head.
+
 ## Изменение видимости
 
 Используется Issue:

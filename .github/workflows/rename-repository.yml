@@ -1,0 +1,236 @@
+name: Rename Repository
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  rename-repository:
+    if: github.event.issue.user.login == 'lvlaksim1' && github.event.issue.title == '[RENAME_REPOSITORY]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate and rename repository
+        id: rename
+        env:
+          FACTORY_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${FACTORY_TOKEN:-}" ]; then
+            echo "status=secret_missing" >> "$GITHUB_OUTPUT"
+            echo "message=REPO_FACTORY_TOKEN is not configured" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          printf '%s' "$ISSUE_BODY" > request.json
+
+          if ! jq -e . request.json >/dev/null 2>&1; then
+            echo "status=invalid" >> "$GITHUB_OUTPUT"
+            echo "message=Issue body must contain valid JSON" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          OLD_NAME="$(jq -r '.old_name // empty' request.json)"
+          NEW_NAME="$(jq -r '.new_name // empty' request.json)"
+          EXPECTED_REPOSITORY_ID="$(jq -r '.expected_repository_id // empty' request.json)"
+          BRANCH="$(jq -r '.branch // "main"' request.json)"
+          EXPECTED_HEAD="$(jq -r '.expected_head // empty' request.json)"
+
+          for NAME in "$OLD_NAME" "$NEW_NAME"; do
+            if [[ ! "$NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
+              echo "status=invalid" >> "$GITHUB_OUTPUT"
+              echo "message=Invalid repository name" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+
+          if [ "$OLD_NAME" = "$NEW_NAME" ]; then
+            echo "status=invalid" >> "$GITHUB_OUTPUT"
+            echo "message=old_name and new_name must differ" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ ! "$EXPECTED_REPOSITORY_ID" =~ ^[0-9]+$ ]]; then
+            echo "status=invalid" >> "$GITHUB_OUTPUT"
+            echo "message=expected_repository_id must be numeric" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ ! "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "status=invalid" >> "$GITHUB_OUTPUT"
+            echo "message=Invalid branch" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ ! "$EXPECTED_HEAD" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "status=invalid" >> "$GITHUB_OUTPUT"
+            echo "message=expected_head must be a 40-character commit SHA" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          api_get() {
+            local url="$1"
+            local out="$2"
+            curl -sS -o "$out" -w '%{http_code}'               -H 'Accept: application/vnd.github+json'               -H 'X-GitHub-Api-Version: 2022-11-28'               -H "Authorization: Bearer $FACTORY_TOKEN"               "$url"
+          }
+
+          OLD_CODE="$(api_get "https://api.github.com/repos/lvlaksim1/$OLD_NAME" old.json)"
+
+          if [ "$OLD_CODE" = "404" ]; then
+            NEW_CODE="$(api_get "https://api.github.com/repos/lvlaksim1/$NEW_NAME" new.json)"
+            if [ "$NEW_CODE" != "200" ]; then
+              echo "status=failed" >> "$GITHUB_OUTPUT"
+              echo "message=Neither source nor expected renamed repository is accessible" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            NEW_ID="$(jq -r '.id' new.json)"
+            if [ "$NEW_ID" != "$EXPECTED_REPOSITORY_ID" ]; then
+              echo "status=failed" >> "$GITHUB_OUTPUT"
+              echo "message=Target repository exists but repository_id does not match expected identity" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            BRANCH_CODE="$(api_get "https://api.github.com/repos/lvlaksim1/$NEW_NAME/branches/$BRANCH" branch.json)"
+            if [ "$BRANCH_CODE" != "200" ]; then
+              echo "status=failed" >> "$GITHUB_OUTPUT"
+              echo "message=Target branch cannot be verified after prior rename" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            ACTUAL_HEAD="$(jq -r '.commit.sha' branch.json)"
+            if [ "$ACTUAL_HEAD" != "$EXPECTED_HEAD" ]; then
+              echo "status=failed" >> "$GITHUB_OUTPUT"
+              echo "message=Target repository identity matches but branch head differs from expected_head" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "status=already_renamed" >> "$GITHUB_OUTPUT"
+            echo "full_name=lvlaksim1/$NEW_NAME" >> "$GITHUB_OUTPUT"
+            echo "repository_id=$NEW_ID" >> "$GITHUB_OUTPUT"
+            echo "head=$ACTUAL_HEAD" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$OLD_CODE" != "200" ]; then
+            ERROR_MESSAGE="$(jq -r '.message // "Unknown GitHub API error"' old.json 2>/dev/null || echo "Unknown GitHub API error")"
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "message=Source lookup HTTP $OLD_CODE: $ERROR_MESSAGE" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          OLD_ID="$(jq -r '.id' old.json)"
+          if [ "$OLD_ID" != "$EXPECTED_REPOSITORY_ID" ]; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "message=Source repository_id differs from expected identity" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          TARGET_CODE="$(api_get "https://api.github.com/repos/lvlaksim1/$NEW_NAME" target.json)"
+          if [ "$TARGET_CODE" = "200" ]; then
+            TARGET_ID="$(jq -r '.id' target.json)"
+            if [ "$TARGET_ID" != "$EXPECTED_REPOSITORY_ID" ]; then
+              echo "status=failed" >> "$GITHUB_OUTPUT"
+              echo "message=Target repository name is already occupied by another repository" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          elif [ "$TARGET_CODE" != "404" ]; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "message=Unable to verify target repository availability" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BRANCH_CODE="$(api_get "https://api.github.com/repos/lvlaksim1/$OLD_NAME/branches/$BRANCH" branch.json)"
+          if [ "$BRANCH_CODE" != "200" ]; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "message=Unable to verify source branch" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          ACTUAL_HEAD="$(jq -r '.commit.sha' branch.json)"
+          if [ "$ACTUAL_HEAD" != "$EXPECTED_HEAD" ]; then
+            echo "status=conflict" >> "$GITHUB_OUTPUT"
+            echo "message=Source branch head changed: expected $EXPECTED_HEAD actual $ACTUAL_HEAD" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          jq -n --arg name "$NEW_NAME" '{name:$name}' > payload.json
+
+          PATCH_CODE="$(curl -sS -o renamed.json -w '%{http_code}' -X PATCH             -H 'Accept: application/vnd.github+json'             -H 'X-GitHub-Api-Version: 2022-11-28'             -H "Authorization: Bearer $FACTORY_TOKEN"             "https://api.github.com/repos/lvlaksim1/$OLD_NAME"             -d @payload.json)"
+
+          if [ "$PATCH_CODE" != "200" ]; then
+            ERROR_MESSAGE="$(jq -r '.message // "Unknown GitHub API error"' renamed.json 2>/dev/null || echo "Unknown GitHub API error")"
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "message=Rename HTTP $PATCH_CODE: $ERROR_MESSAGE" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          FULL_NAME="$(jq -r '.full_name' renamed.json)"
+          NEW_ID="$(jq -r '.id' renamed.json)"
+          if [ "$FULL_NAME" != "lvlaksim1/$NEW_NAME" ] || [ "$NEW_ID" != "$EXPECTED_REPOSITORY_ID" ]; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "message=Rename response failed identity verification" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          VERIFY_CODE="$(api_get "https://api.github.com/repos/lvlaksim1/$NEW_NAME/branches/$BRANCH" verify-branch.json)"
+          if [ "$VERIFY_CODE" != "200" ]; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "message=Renamed repository branch could not be verified" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          VERIFY_HEAD="$(jq -r '.commit.sha' verify-branch.json)"
+          if [ "$VERIFY_HEAD" != "$EXPECTED_HEAD" ]; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "message=Repository renamed, but branch head changed unexpectedly" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "status=renamed" >> "$GITHUB_OUTPUT"
+          echo "full_name=$FULL_NAME" >> "$GITHUB_OUTPUT"
+          echo "repository_id=$NEW_ID" >> "$GITHUB_OUTPUT"
+          echo "head=$VERIFY_HEAD" >> "$GITHUB_OUTPUT"
+
+      - name: Report result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          STATUS: ${{ steps.rename.outputs.status }}
+          MESSAGE: ${{ steps.rename.outputs.message }}
+          FULL_NAME: ${{ steps.rename.outputs.full_name }}
+          REPOSITORY_ID: ${{ steps.rename.outputs.repository_id }}
+          HEAD: ${{ steps.rename.outputs.head }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "$STATUS" in
+            renamed)
+              BODY="RENAMED: $FULL_NAME"$'\n'"REPOSITORY_ID: $REPOSITORY_ID"$'\n'"HEAD: $HEAD"
+              ;;
+            already_renamed)
+              BODY="ALREADY_RENAMED: $FULL_NAME"$'\n'"REPOSITORY_ID: $REPOSITORY_ID"$'\n'"HEAD: $HEAD"
+              ;;
+            conflict)
+              BODY="CONFLICT: $MESSAGE"
+              ;;
+            secret_missing)
+              BODY="FAILED: REPO_FACTORY_TOKEN is not configured."
+              ;;
+            invalid)
+              BODY="FAILED: $MESSAGE"
+              ;;
+            *)
+              BODY="FAILED: $MESSAGE"
+              ;;
+          esac
+
+          gh api --method POST             "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments"             -f body="$BODY"
