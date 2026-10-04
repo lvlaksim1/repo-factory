@@ -2,15 +2,15 @@
   "schema_version": 2,
   "project_manager": {
     "repository": "lvlaksim1/context-capsule-project-manager",
-    "commit": "3d0d62d76dfe7f218ce84b59db55366bbdb6cc33",
-    "verification": "Project Manager CI after split provenance, structured legacy normalization, readiness fixes and 128K default recovery budget: tests + compile + CLI + VALID + READY + recover SUCCESS"
+    "commit": "9d6a2f69d38d880c44ea59c9b3d31b406cc5bcf1",
+    "verification": "Project Manager CI after explicit component-version split: tests + compile + CLI + VALID + READY + recover SUCCESS"
   },
   "service_agent_base": {
     "repository": "lvlaksim1/service-agent-base",
     "commit": "c010bf8d93c5a3b7a35e3d45891f72df7488bf2f",
     "verification": "Service Agent Base CI after explicit source provenance cleanup: unit tests + compile + CLI + install contract SUCCESS"
   },
-  "policy": "All component sources are exact immutable commit SHAs; Project Manager installations receive separate Core and PM provenance pins; factory changes must pass component contract smoke.",
+  "policy": "All component sources are exact immutable commit SHAs; Project Manager installations receive separate Core/PM provenance and version coordinates; factory changes must pass component contract smoke.",
   "context_capsule_core": {
     "repository": "lvlaksim1/context-capsule",
     "commit": "2ef41a5ed57ae514cc5980065560d7e55d5e4b9a",
