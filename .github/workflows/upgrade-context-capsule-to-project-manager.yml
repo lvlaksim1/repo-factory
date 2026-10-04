@@ -102,145 +102,17 @@ jobs:
           fi
           PRODUCT_BRANCH="$DISCOVERY_BRANCH"
 
-          export TARGET_REPO NAME BRANCH PRODUCT_BRANCH BEFORE CORE_REPO CORE_SHA PM_REPO PM_SHA
-          export TARGET_DIR="$WORK/target"
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          target = Path(os.environ["TARGET_DIR"])
-          repo = os.environ["TARGET_REPO"]
-          name = os.environ["NAME"]
-          branch = os.environ["BRANCH"]
-          product_branch = os.environ["PRODUCT_BRANCH"]
-          before = os.environ["BEFORE"]
-          core_repo = os.environ["CORE_REPO"]
-          core_sha = os.environ["CORE_SHA"]
-          pm_repo = os.environ["PM_REPO"]
-          pm_sha = os.environ["PM_SHA"]
-
-          manager_dir = target / ".context" / "manager"
-          memory_dir = target / ".context" / "memory"
-          manager_dir.mkdir(parents=True, exist_ok=True)
-          memory_dir.mkdir(parents=True, exist_ok=True)
-
-          manager_id = f"{name.lower()}-project-manager"
-          (manager_dir / "identity.json").write_text(
-              json.dumps({"manager_id": manager_id}, ensure_ascii=False, indent=2) + "\n",
-              encoding="utf-8",
-          )
-
-          (manager_dir / "mandate.md").write_text(f"""# Manager mandate
-
-The Project Manager owns durable project continuity, reconciliation, planning, verification,
-and maintenance of manager state for `{repo}`.
-
-It may analyze repository state, maintain `.context`, coordinate and execute non-destructive
-work already authorized by existing project rules and explicit owner directives. It must preserve
-the project's established identity, goals, constraints, decisions, and branch authority.
-
-It must not expand its own authority, bypass project constraints, alter credentials/access,
-change repository visibility, publish releases, or perform destructive/irreversible actions
-without authority already present in project rules or a later explicit owner directive.
-
-Later explicit owner directives and repository-specific authority rules supersede this bootstrap
-mandate when they are more specific.
-""", encoding="utf-8")
-
-          (manager_dir / "beliefs.md").write_text(f"""# Manager beliefs
-
-## Owner-authorized manager installation
-
-The owner explicitly authorized installation of a persistent Project Manager into this repository,
-which previously used standalone Context Capsule Core v1.3.1.
-
-- source: repo-factory command `[UPGRADE_CONTEXT_CAPSULE_TO_PROJECT_MANAGER]`
-- authority: owner-directive
-
-## Preserved durable project context
-
-The pre-existing project identity, goals, architecture, constraints, current working views, rules,
-decisions, dialogues, history, and handoff state are preserved as repository evidence and must be
-reconciled before consequential action.
-
-- source: repository state at `{before}` on `{branch}`
-- authority: verified-repository
-
-## Product coordinates
-
-The installed durable-context base is Context Capsule Core v1.3.1 at `{core_repo}@{core_sha}`.
-The Project Manager implementation is `{pm_repo}@{pm_sha}`.
-
-- source: `repo-factory/components.lock.json`
-- authority: verified-repository
-
-## Branch authority
-
-Manager state authority is `{branch}`; product baseline authority is `{product_branch}`.
-Changing either authority requires explicit reconciliation and must not happen implicitly.
-
-- source: preserved Context Capsule branch topology and explicit upgrade
-- authority: verified-repository
-""", encoding="utf-8")
-
-          (manager_dir / "goals.md").write_text("""# Manager goals
-
-- Preserve and pursue the project's existing durable goals rather than replacing them with generic manager goals.
-- Maintain coherent Project Manager state across runtime replacement.
-- Reconcile stored context with current repository, CI, runtime, and owner evidence before high-impact decisions.
-- Verify consequential work before recording completion and persist only durable semantic consequences.
-""", encoding="utf-8")
-
-          (manager_dir / "intentions.md").write_text("""# Manager intentions and commitments
-
-## Active — continuity and reconciliation
-
-Status: active.
-
-Reinstate from the authoritative manager-state branch, reconcile the preserved project context
-against current evidence, and continue the project's recorded goals and next actions within its
-existing constraints and owner authority.
-
-Completion requires a later project-specific verification that no unresolved continuity work
-remains; installation alone does not complete this commitment.
-""", encoding="utf-8")
-
-          (manager_dir / "plans.md").write_text(f"""# Manager plans
-
-1. Reinstate from `{branch}` and read the preserved project identity, goals, architecture, constraints, rules, decisions, current state, blockers, and next actions.
-2. Reconcile that durable state against the current product baseline `{product_branch}` and relevant live evidence.
-3. Continue already-authorized project work without inventing new authority.
-4. Verify results using repository/CI/runtime evidence appropriate to the project.
-5. Persist changed beliefs, commitments, decisions, and working views atomically when their meaning changes.
-""", encoding="utf-8")
-
-          (memory_dir / "semantic.md").write_text(f"""# Semantic memory
-
-## Standalone Capsule migration
-
-This Project Manager was created by an explicit owner-authorized upgrade from standalone Context
-Capsule Core v1.3.1. The existing project context was retained as project evidence; the manager
-layer was added on top and must not reinterpret preserved project facts merely because the runtime
-model changed.
-
-- source: repo-factory upgrade from repository state `{before}`
-- authority: owner-directive; verified-repository
-""", encoding="utf-8")
-
-          (memory_dir / "procedural.md").write_text("""# Procedural memory
-
-## Reinstantiation procedure
-
-Use the authoritative manager-state branch, require Project Manager `VALID` and `READY`, and
-use the deterministic recovery pack before resuming consequential manager responsibility. Treat
-runtime conversation/checkpoint state as replaceable and repository durable state as the continuity
-surface.
-
-- source: Project Manager Contract and explicit repository upgrade
-- authority: core-contract; verified-repository
-""", encoding="utf-8")
-          PY
+          MANAGER_ID="$(python "$GITHUB_WORKSPACE/scripts/bootstrap_project_manager_state.py" \
+            --target "$WORK/target" \
+            --repository "$TARGET_REPO" \
+            --name "$NAME" \
+            --manager-branch "$BRANCH" \
+            --product-branch "$PRODUCT_BRANCH" \
+            --source-commit "$BEFORE" \
+            --core-repository "$CORE_REPO" \
+            --core-commit "$CORE_SHA" \
+            --pm-repository "$PM_REPO" \
+            --pm-commit "$PM_SHA")"
 
           git clone --quiet "https://github.com/$PM_REPO.git" "$WORK/project-manager"
           git -C "$WORK/project-manager" checkout --quiet --detach "$PM_SHA"
@@ -259,7 +131,7 @@ surface.
           fi
           test -s "$WORK/recovery.txt"
 
-          MANAGER_ID="${NAME,,}-project-manager"
+          test -n "$MANAGER_ID"
           jq -e --arg core_repo "$CORE_REPO" --arg core "$CORE_SHA" --arg pm_repo "$PM_REPO" --arg pm "$PM_SHA" '
             .context_capsule.version == "1.3.1"
             and .context_capsule.repository == $core_repo
