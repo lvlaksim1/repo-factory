@@ -73,6 +73,11 @@
 `--context-capsule-commit` для Core и `--project-manager-commit` для PM. Исторический
 `--core-commit` больше не используется фабрикой.
 
+Версии компонентов также независимы: Context Capsule Core остаётся `v1.3.1`, а
+Project Manager — `v2.0.0-dev`. Новая PM-установка обязана записать обе версии явно в
+`.context/capsule.json`; историческое верхнеуровневое `version: 2.0.0-dev` считается
+deprecated alias именно версии Project Manager.
+
 Таким образом, ни Project Manager, ни Service Agent Base больше не берутся из исторической ветки `context-capsule:v2-manager-runtime`.
 Каждый источник закрепляется точным immutable commit SHA в `components.lock.json`. Этот файл является единственным каноническим distribution lock; workflow читает repository/commit только из него.
 
