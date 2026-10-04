@@ -110,6 +110,28 @@ Workflow:
 - публикует только обычный fast-forward commit в указанную ветку;
 - ничего не меняет, если репозиторий уже соответствует текущим pins.
 
+## Миграция standalone Context Capsule Core
+
+Для существующих standalone Context Capsule v1.3.x без Project Manager используется отдельная
+guarded-команда:
+
+`[MIGRATE_CONTEXT_CAPSULE_CORE]`
+
+Тело Issue:
+
+```json
+{
+  "name": "my-repository",
+  "branch": "main",
+  "expected_head": "40-character-exact-current-commit-sha"
+}
+```
+
+Workflow берёт Core только из `components.lock.json`, принимает только уже установленный
+`lvlaksim1/context-capsule` v1.3.x, выполняет non-destructive `capsulectl repair`, требует
+`validate → ready → recover`, проверяет итоговые `version/core_commit` и публикует только
+fast-forward commit. При изменившемся `expected_head` запись запрещена.
+
 ## Стандартные Telegram secrets
 
 Поле `standard_secrets` опционально и по умолчанию равно `true`.
