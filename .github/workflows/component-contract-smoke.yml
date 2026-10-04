@@ -77,7 +77,16 @@ jobs:
           test -f /tmp/pm-target/.context/manager/CONTRACT.md
           test -f /tmp/pm-target/.context/manager/identity.json
           jq -e --arg core "$CORE_SHA" --arg pm "$PM_SHA" '
-            .provenance.context_capsule.repository == "lvlaksim1/context-capsule"
+            .context_capsule.version == "1.3.1"
+            and .context_capsule.repository == "lvlaksim1/context-capsule"
+            and .context_capsule.commit == $core
+            and .project_manager.version == "2.0.0-dev"
+            and .project_manager.repository == "lvlaksim1/context-capsule-project-manager"
+            and .project_manager.commit == $pm
+            and .context_capsule_version == "1.3.1"
+            and .project_manager_version == "2.0.0-dev"
+            and .version == "2.0.0-dev"
+            and .provenance.context_capsule.repository == "lvlaksim1/context-capsule"
             and .provenance.context_capsule.commit == $core
             and .provenance.project_manager.repository == "lvlaksim1/context-capsule-project-manager"
             and .provenance.project_manager.commit == $pm
@@ -85,6 +94,12 @@ jobs:
             and .project_manager_commit == $pm
             and .core_commit == $pm
           ' /tmp/pm-target/.context/capsule.json >/dev/null
+
+          jq -e '
+            .context_capsule_version == "1.3.1"
+            and .project_manager_version == "2.0.0-dev"
+            and .context_version == "2.0.0-dev"
+          ' /tmp/pm-target/.context/manifest.json >/dev/null
 
       - name: Service Agent Base install contract
         shell: bash
