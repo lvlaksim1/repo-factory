@@ -120,7 +120,16 @@ jobs:
           test -s "$WORK/recovery.txt"
 
           jq -e --arg core_repo "$CORE_REPO" --arg core "$CORE_SHA" --arg pm_repo "$PM_REPO" --arg pm "$PM_SHA" '
-            .provenance.context_capsule.repository == $core_repo
+            .context_capsule.version == "1.3.1"
+            and .context_capsule.repository == $core_repo
+            and .context_capsule.commit == $core
+            and .project_manager.version == "2.0.0-dev"
+            and .project_manager.repository == $pm_repo
+            and .project_manager.commit == $pm
+            and .context_capsule_version == "1.3.1"
+            and .project_manager_version == "2.0.0-dev"
+            and .version == "2.0.0-dev"
+            and .provenance.context_capsule.repository == $core_repo
             and .provenance.context_capsule.commit == $core
             and .provenance.project_manager.repository == $pm_repo
             and .provenance.project_manager.commit == $pm
@@ -128,6 +137,12 @@ jobs:
             and .project_manager_commit == $pm
             and .core_commit == $pm
           ' "$WORK/target/.context/capsule.json" >/dev/null
+
+          jq -e '
+            .context_capsule_version == "1.3.1"
+            and .project_manager_version == "2.0.0-dev"
+            and .context_version == "2.0.0-dev"
+          ' "$WORK/target/.context/manifest.json" >/dev/null
 
           git -C "$WORK/target" config user.name "repo-factory"
           git -C "$WORK/target" config user.email "repo-factory@users.noreply.github.com"
