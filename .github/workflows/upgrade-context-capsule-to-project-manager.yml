@@ -1,0 +1,339 @@
+name: Upgrade Context Capsule to Project Manager
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  upgrade:
+    if: github.event.issue.user.login == 'lvlaksim1' && github.event.issue.title == '[UPGRADE_CONTEXT_CAPSULE_TO_PROJECT_MANAGER]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Upgrade target
+        id: upgrade
+        env:
+          GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$ISSUE_BODY" > /tmp/request.json
+
+          if ! jq -e . /tmp/request.json >/dev/null 2>&1; then
+            echo "status=invalid" >> "$GITHUB_OUTPUT"
+            echo "message=Issue body must be valid JSON" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          NAME="$(jq -r '.name // empty' /tmp/request.json)"
+          BRANCH="$(jq -r '.branch // "main"' /tmp/request.json)"
+          EXPECTED_HEAD="$(jq -r '.expected_head // empty' /tmp/request.json)"
+
+          if [[ ! "$NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "status=invalid" >> "$GITHUB_OUTPUT"
+            echo "message=Invalid repository name" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ ! "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]] || [[ "$BRANCH" == *".."* ]]; then
+            echo "status=invalid" >> "$GITHUB_OUTPUT"
+            echo "message=Invalid branch name" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ ! "$EXPECTED_HEAD" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "status=invalid" >> "$GITHUB_OUTPUT"
+            echo "message=expected_head must be an exact 40-character commit SHA" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          TARGET_REPO="lvlaksim1/$NAME"
+          LOCK_SCHEMA="$(jq -r '.schema_version' components.lock.json)"
+          CORE_REPO="$(jq -r '.context_capsule_core.repository' components.lock.json)"
+          CORE_SHA="$(jq -r '.context_capsule_core.commit' components.lock.json)"
+          PM_REPO="$(jq -r '.project_manager.repository' components.lock.json)"
+          PM_SHA="$(jq -r '.project_manager.commit' components.lock.json)"
+
+          if [ "$LOCK_SCHEMA" != "2" ]; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "message=components.lock.json schema_version must be 2" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          [[ "$CORE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PM_SHA" =~ ^[0-9a-f]{40}$ ]]
+
+          WORK="$(mktemp -d)"
+          trap 'rm -rf "$WORK"' EXIT
+          trap 'rc=$?; echo "status=failed" >> "$GITHUB_OUTPUT"; echo "message=Capsule-to-PM upgrade failed with exit $rc; inspect workflow logs" >> "$GITHUB_OUTPUT"' ERR
+
+          gh auth setup-git >/dev/null
+          gh repo clone "$TARGET_REPO" "$WORK/target" -- --depth=1 >/dev/null
+          git -C "$WORK/target" fetch --quiet --depth=1 origin             "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+          git -C "$WORK/target" checkout --quiet -B "$BRANCH" "origin/$BRANCH"
+
+          BEFORE="$(git -C "$WORK/target" rev-parse HEAD)"
+          if [ "$BEFORE" != "$EXPECTED_HEAD" ]; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "message=Target branch moved: expected $EXPECTED_HEAD, actual $BEFORE" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          test -f "$WORK/target/.context/capsule.json"
+          test -f "$WORK/target/.context/manifest.json"
+          test ! -f "$WORK/target/.context/manager/identity.json"
+
+          jq -e '.schema == "context-capsule" and .source == "lvlaksim1/context-capsule" and (.version | startswith("1.3."))'             "$WORK/target/.context/capsule.json" >/dev/null
+
+          AUTH_BRANCH="$(jq -r '.authoritative_branch // empty' "$WORK/target/.context/manifest.json")"
+          DISCOVERY_BRANCH="$(jq -r '.discovery_branch // .authoritative_branch // empty' "$WORK/target/.context/manifest.json")"
+          if [ -z "$AUTH_BRANCH" ]; then AUTH_BRANCH="$BRANCH"; fi
+          if [ -z "$DISCOVERY_BRANCH" ]; then DISCOVERY_BRANCH="$AUTH_BRANCH"; fi
+          if [ "$AUTH_BRANCH" != "$BRANCH" ]; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "message=Upgrade must target authoritative branch $AUTH_BRANCH, not $BRANCH" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          PRODUCT_BRANCH="$DISCOVERY_BRANCH"
+
+          export TARGET_REPO NAME BRANCH PRODUCT_BRANCH BEFORE CORE_REPO CORE_SHA PM_REPO PM_SHA
+          export TARGET_DIR="$WORK/target"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          target = Path(os.environ["TARGET_DIR"])
+          repo = os.environ["TARGET_REPO"]
+          name = os.environ["NAME"]
+          branch = os.environ["BRANCH"]
+          product_branch = os.environ["PRODUCT_BRANCH"]
+          before = os.environ["BEFORE"]
+          core_repo = os.environ["CORE_REPO"]
+          core_sha = os.environ["CORE_SHA"]
+          pm_repo = os.environ["PM_REPO"]
+          pm_sha = os.environ["PM_SHA"]
+
+          manager_dir = target / ".context" / "manager"
+          memory_dir = target / ".context" / "memory"
+          manager_dir.mkdir(parents=True, exist_ok=True)
+          memory_dir.mkdir(parents=True, exist_ok=True)
+
+          manager_id = f"{name.lower()}-project-manager"
+          (manager_dir / "identity.json").write_text(
+              json.dumps({"manager_id": manager_id}, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+
+          (manager_dir / "mandate.md").write_text(f"""# Manager mandate
+
+The Project Manager owns durable project continuity, reconciliation, planning, verification,
+and maintenance of manager state for `{repo}`.
+
+It may analyze repository state, maintain `.context`, coordinate and execute non-destructive
+work already authorized by existing project rules and explicit owner directives. It must preserve
+the project's established identity, goals, constraints, decisions, and branch authority.
+
+It must not expand its own authority, bypass project constraints, alter credentials/access,
+change repository visibility, publish releases, or perform destructive/irreversible actions
+without authority already present in project rules or a later explicit owner directive.
+
+Later explicit owner directives and repository-specific authority rules supersede this bootstrap
+mandate when they are more specific.
+""", encoding="utf-8")
+
+          (manager_dir / "beliefs.md").write_text(f"""# Manager beliefs
+
+## Owner-authorized manager installation
+
+The owner explicitly authorized installation of a persistent Project Manager into this repository,
+which previously used standalone Context Capsule Core v1.3.1.
+
+- source: repo-factory command `[UPGRADE_CONTEXT_CAPSULE_TO_PROJECT_MANAGER]`
+- authority: owner-directive
+
+## Preserved durable project context
+
+The pre-existing project identity, goals, architecture, constraints, current working views, rules,
+decisions, dialogues, history, and handoff state are preserved as repository evidence and must be
+reconciled before consequential action.
+
+- source: repository state at `{before}` on `{branch}`
+- authority: verified-repository
+
+## Product coordinates
+
+The installed durable-context base is Context Capsule Core v1.3.1 at `{core_repo}@{core_sha}`.
+The Project Manager implementation is `{pm_repo}@{pm_sha}`.
+
+- source: `repo-factory/components.lock.json`
+- authority: verified-repository
+
+## Branch authority
+
+Manager state authority is `{branch}`; product baseline authority is `{product_branch}`.
+Changing either authority requires explicit reconciliation and must not happen implicitly.
+
+- source: preserved Context Capsule branch topology and explicit upgrade
+- authority: verified-repository
+""", encoding="utf-8")
+
+          (manager_dir / "goals.md").write_text("""# Manager goals
+
+- Preserve and pursue the project's existing durable goals rather than replacing them with generic manager goals.
+- Maintain coherent Project Manager state across runtime replacement.
+- Reconcile stored context with current repository, CI, runtime, and owner evidence before high-impact decisions.
+- Verify consequential work before recording completion and persist only durable semantic consequences.
+""", encoding="utf-8")
+
+          (manager_dir / "intentions.md").write_text("""# Manager intentions and commitments
+
+## Active — continuity and reconciliation
+
+Status: active.
+
+Reinstate from the authoritative manager-state branch, reconcile the preserved project context
+against current evidence, and continue the project's recorded goals and next actions within its
+existing constraints and owner authority.
+
+Completion requires a later project-specific verification that no unresolved continuity work
+remains; installation alone does not complete this commitment.
+""", encoding="utf-8")
+
+          (manager_dir / "plans.md").write_text(f"""# Manager plans
+
+1. Reinstate from `{branch}` and read the preserved project identity, goals, architecture, constraints, rules, decisions, current state, blockers, and next actions.
+2. Reconcile that durable state against the current product baseline `{product_branch}` and relevant live evidence.
+3. Continue already-authorized project work without inventing new authority.
+4. Verify results using repository/CI/runtime evidence appropriate to the project.
+5. Persist changed beliefs, commitments, decisions, and working views atomically when their meaning changes.
+""", encoding="utf-8")
+
+          (memory_dir / "semantic.md").write_text(f"""# Semantic memory
+
+## Standalone Capsule migration
+
+This Project Manager was created by an explicit owner-authorized upgrade from standalone Context
+Capsule Core v1.3.1. The existing project context was retained as project evidence; the manager
+layer was added on top and must not reinterpret preserved project facts merely because the runtime
+model changed.
+
+- source: repo-factory upgrade from repository state `{before}`
+- authority: owner-directive; verified-repository
+""", encoding="utf-8")
+
+          (memory_dir / "procedural.md").write_text("""# Procedural memory
+
+## Reinstantiation procedure
+
+Use the authoritative manager-state branch, require Project Manager `VALID` and `READY`, and
+use the deterministic recovery pack before resuming consequential manager responsibility. Treat
+runtime conversation/checkpoint state as replaceable and repository durable state as the continuity
+surface.
+
+- source: Project Manager Contract and explicit repository upgrade
+- authority: core-contract; verified-repository
+""", encoding="utf-8")
+          PY
+
+          git clone --quiet "https://github.com/$PM_REPO.git" "$WORK/project-manager"
+          git -C "$WORK/project-manager" checkout --quiet --detach "$PM_SHA"
+
+          python "$WORK/project-manager/installer/pmctl.py" upgrade             --target "$WORK/target"             --repository "$TARGET_REPO"             --branch "$BRANCH"             --product-branch "$PRODUCT_BRANCH"             --project-manager-commit "$PM_SHA"             --context-capsule-commit "$CORE_SHA"
+
+          python "$WORK/project-manager/installer/pmctl.py" normalize-legacy-provenance             --target "$WORK/target"             --branch "$BRANCH"
+
+          python "$WORK/project-manager/installer/pmctl.py" validate --target "$WORK/target"
+          python "$WORK/project-manager/installer/pmctl.py" ready             --target "$WORK/target"             --expected-manager-ref "$BEFORE"
+
+          if ! python "$WORK/project-manager/installer/pmctl.py" recover             --target "$WORK/target"             --expected-manager-ref "$BEFORE"             --max-chars 131072 > "$WORK/recovery.txt"; then
+            echo "Project Manager recover failed:" >&2
+            cat "$WORK/recovery.txt" >&2
+            exit 1
+          fi
+          test -s "$WORK/recovery.txt"
+
+          MANAGER_ID="${NAME,,}-project-manager"
+          jq -e --arg core_repo "$CORE_REPO" --arg core "$CORE_SHA" --arg pm_repo "$PM_REPO" --arg pm "$PM_SHA" '
+            .context_capsule.version == "1.3.1"
+            and .context_capsule.repository == $core_repo
+            and .context_capsule.commit == $core
+            and .project_manager.version == "2.0.0-dev"
+            and .project_manager.repository == $pm_repo
+            and .project_manager.commit == $pm
+            and .context_capsule_version == "1.3.1"
+            and .project_manager_version == "2.0.0-dev"
+            and .source == "lvlaksim1/context-capsule-project-manager"
+          ' "$WORK/target/.context/capsule.json" >/dev/null
+
+          jq -e --arg manager "$MANAGER_ID" --arg repo "$TARGET_REPO" '
+            .manager_id == $manager
+            and .repository == $repo
+            and .role == "Project Manager"
+          ' "$WORK/target/.context/manager/identity.json" >/dev/null
+
+          jq -e --arg manager_branch "$BRANCH" --arg product_branch "$PRODUCT_BRANCH" '
+            .authority.manager_state_branch == $manager_branch
+            and .authority.product_branch == $product_branch
+            and .context_capsule_version == "1.3.1"
+            and .project_manager_version == "2.0.0-dev"
+          ' "$WORK/target/.context/manifest.json" >/dev/null
+
+          git -C "$WORK/target" config user.name "repo-factory"
+          git -C "$WORK/target" config user.email "repo-factory@users.noreply.github.com"
+          git -C "$WORK/target" add -A
+
+          if git -C "$WORK/target" diff --cached --quiet; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "message=Upgrade produced no changes; target may already contain a Project Manager" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git -C "$WORK/target" commit --quiet -m "Upgrade Context Capsule to Project Manager"
+          AFTER="$(git -C "$WORK/target" rev-parse HEAD)"
+          git -C "$WORK/target" push --quiet origin "HEAD:$BRANCH"
+
+          echo "status=success" >> "$GITHUB_OUTPUT"
+          echo "target=$TARGET_REPO" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "product_branch=$PRODUCT_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "before=$BEFORE" >> "$GITHUB_OUTPUT"
+          echo "after=$AFTER" >> "$GITHUB_OUTPUT"
+          echo "core_repo=$CORE_REPO" >> "$GITHUB_OUTPUT"
+          echo "core_sha=$CORE_SHA" >> "$GITHUB_OUTPUT"
+          echo "pm_repo=$PM_REPO" >> "$GITHUB_OUTPUT"
+          echo "pm_sha=$PM_SHA" >> "$GITHUB_OUTPUT"
+          echo "manager_id=$MANAGER_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Report result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          STATUS: ${{ steps.upgrade.outputs.status }}
+          MESSAGE: ${{ steps.upgrade.outputs.message }}
+          TARGET: ${{ steps.upgrade.outputs.target }}
+          TARGET_BRANCH: ${{ steps.upgrade.outputs.branch }}
+          PRODUCT_BRANCH: ${{ steps.upgrade.outputs.product_branch }}
+          BEFORE: ${{ steps.upgrade.outputs.before }}
+          AFTER: ${{ steps.upgrade.outputs.after }}
+          CORE_REPO: ${{ steps.upgrade.outputs.core_repo }}
+          CORE_SHA: ${{ steps.upgrade.outputs.core_sha }}
+          PM_REPO: ${{ steps.upgrade.outputs.pm_repo }}
+          PM_SHA: ${{ steps.upgrade.outputs.pm_sha }}
+          MANAGER_ID: ${{ steps.upgrade.outputs.manager_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$STATUS" = "success" ]; then
+            BODY="PM_INSTALL_OK: $TARGET@$TARGET_BRANCH"$'\n'"PRODUCT_BRANCH: $PRODUCT_BRANCH"$'\n'"BEFORE: $BEFORE"$'\n'"AFTER: $AFTER"$'\n'"MANAGER_ID: $MANAGER_ID"$'\n'"CONTEXT_CAPSULE_CORE: $CORE_REPO@$CORE_SHA"$'\n'"PROJECT_MANAGER: $PM_REPO@$PM_SHA"$'\n'"VALID/READY/RECOVER: PASS"
+          else
+            BODY="PM_INSTALL_FAILED: ${MESSAGE:-workflow failure}"
+          fi
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" -f body="$BODY"
