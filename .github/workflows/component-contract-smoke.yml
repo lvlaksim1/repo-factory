@@ -9,6 +9,7 @@ on:
       - .github/workflows/component-contract-smoke.yml
       - .github/workflows/migrate-project-manager-provenance.yml
       - .github/workflows/migrate-context-capsule-core.yml
+      - .github/workflows/upgrade-context-capsule-to-project-manager.yml
   pull_request:
     paths:
       - components.lock.json
@@ -16,6 +17,7 @@ on:
       - .github/workflows/component-contract-smoke.yml
       - .github/workflows/migrate-project-manager-provenance.yml
       - .github/workflows/migrate-context-capsule-core.yml
+      - .github/workflows/upgrade-context-capsule-to-project-manager.yml
 
 permissions:
   contents: read
