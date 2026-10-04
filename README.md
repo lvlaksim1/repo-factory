@@ -66,7 +66,7 @@
 
 - Context Capsule Core compatibility → `lvlaksim1/context-capsule`;
 - `project-manager` → `lvlaksim1/context-capsule-project-manager` → `pmctl.py install`;
-- `service-agent` → `lvlaksim1/service-agent-base` → `servicectl.py install`;
+- `service-agent` → `lvlaksim1/service-agent-base` → `servicectl.py install`; installed metadata records explicit `service_agent_base_commit` provenance;
 - `infrastructure` → агентская идентичность и Context Capsule не устанавливаются.
 
 Для профиля `project-manager` фабрика передаёт в `pmctl.py` два разных SHA:

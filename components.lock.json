@@ -7,8 +7,8 @@
   },
   "service_agent_base": {
     "repository": "lvlaksim1/service-agent-base",
-    "commit": "163688088347f67371adb2958af5aa25a1ad7be5",
-    "verification": "Service Agent Base CI run 37159389393: unit tests + compile + CLI + install contract SUCCESS"
+    "commit": "c010bf8d93c5a3b7a35e3d45891f72df7488bf2f",
+    "verification": "Service Agent Base CI after explicit source provenance cleanup: unit tests + compile + CLI + install contract SUCCESS"
   },
   "policy": "All component sources are exact immutable commit SHAs; Project Manager installations receive separate Core and PM provenance pins; factory changes must pass component contract smoke.",
   "context_capsule_core": {

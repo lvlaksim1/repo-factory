@@ -110,3 +110,10 @@ jobs:
 
           python /tmp/service-agent-base/installer/servicectl.py validate --target /tmp/service-target
           test -f /tmp/service-target/.context/service-agent/CONTRACT.md
+          jq -e --arg sha "$SA_SHA" '
+            .source == "lvlaksim1/service-agent-base"
+            and .service_agent_base_commit == $sha
+            and .provenance.service_agent_base.repository == "lvlaksim1/service-agent-base"
+            and .provenance.service_agent_base.commit == $sha
+            and .core_commit == $sha
+          ' /tmp/service-target/.context/capsule.json >/dev/null
