@@ -115,6 +115,38 @@ Workflow:
 - публикует только обычный fast-forward commit в указанную ветку;
 - ничего не меняет, если репозиторий уже соответствует текущим pins.
 
+## Заселение Project Manager в standalone Context Capsule
+
+Для репозитория, где уже есть standalone Context Capsule Core v1.3.x, но ещё нет Project Manager,
+используется guarded-команда:
+
+`[UPGRADE_CONTEXT_CAPSULE_TO_PROJECT_MANAGER]`
+
+Тело Issue:
+
+```json
+{
+  "name": "my-repository",
+  "branch": "main",
+  "expected_head": "40-character-exact-current-commit-sha"
+}
+```
+
+Workflow принимает только authoritative ветку существующей Capsule и только состояние
+`source = lvlaksim1/context-capsule`, `version = 1.3.x` без
+`.context/manager/identity.json`.
+
+Перед `pmctl upgrade` он добавляет минимальное owner-authorized Project Manager state:
+стабильный project-scoped `manager_id`, bounded mandate, beliefs с provenance, goals,
+active continuity intention, plan и semantic/procedural memory. Существующие project identity,
+goals, architecture, constraints, current views, rules, decisions, dialogues и history не
+перезаписываются.
+
+После upgrade обязательны `normalize-legacy-provenance → validate → ready → recover`, проверка
+Core/PM versions и immutable pins, а публикация разрешена только fast-forward от точного
+`expected_head`. Для redirect Capsule product baseline автоматически наследуется из
+`discovery_branch`.
+
 ## Миграция standalone Context Capsule Core
 
 Для существующих standalone Context Capsule v1.3.x без Project Manager используется отдельная
