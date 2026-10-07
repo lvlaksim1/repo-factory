@@ -88,7 +88,6 @@ jobs:
           fi
 
           echo "profile=$PROFILE" >> "$GITHUB_OUTPUT"
-          echo "private=$PRIVATE" >> "$GITHUB_OUTPUT"
           echo "standard_secrets=$STANDARD_SECRETS" >> "$GITHUB_OUTPUT"
 
           jq -n \
@@ -188,60 +187,6 @@ jobs:
           git -C "$WORK_DIR/target" commit --quiet -m "$COMMIT_MESSAGE"
           git -C "$WORK_DIR/target" push --quiet origin "HEAD:$TARGET_BRANCH"
 
-      - name: Install repository storage policy
-        id: storage
-        if: steps.create.outputs.status == 'created'
-        env:
-          GH_TOKEN: ${{ secrets.REPO_FACTORY_TOKEN }}
-          TARGET_REPO: ${{ steps.create.outputs.full_name }}
-          TARGET_PRIVATE: ${{ steps.create.outputs.private }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          WORK_DIR="$(mktemp -d)"
-          trap 'rm -rf "$WORK_DIR"' EXIT
-
-          gh auth setup-git >/dev/null
-          gh repo clone "$TARGET_REPO" "$WORK_DIR/target" -- --depth=1 >/dev/null
-          TARGET_BRANCH="$(git -C "$WORK_DIR/target" branch --show-current)"
-
-          mkdir -p "$WORK_DIR/target/scripts"
-          cp "$GITHUB_WORKSPACE/policy/repository-storage/check_repository_storage.py"             "$WORK_DIR/target/scripts/check_repository_storage.py"
-
-          if [ "$TARGET_PRIVATE" = "false" ]; then
-            mkdir -p "$WORK_DIR/target/.github/workflows"
-            cp "$GITHUB_WORKSPACE/policy/repository-storage/repository-storage.yml"               "$WORK_DIR/target/.github/workflows/repository-storage.yml"
-            STORAGE_MODE="public_full"
-          else
-            STORAGE_MODE="private_guard"
-          fi
-
-          touch "$WORK_DIR/target/.gitignore"
-          while IFS= read -r line || [ -n "$line" ]; do
-            if ! grep -Fxq -- "$line" "$WORK_DIR/target/.gitignore"; then
-              printf '%s\n' "$line" >> "$WORK_DIR/target/.gitignore"
-            fi
-          done < "$GITHUB_WORKSPACE/policy/repository-storage/gitignore.fragment"
-
-          python "$WORK_DIR/target/scripts/check_repository_storage.py"
-
-          git -C "$WORK_DIR/target" config user.name "repo-factory"
-          git -C "$WORK_DIR/target" config user.email "repo-factory@users.noreply.github.com"
-          git -C "$WORK_DIR/target" add scripts/check_repository_storage.py .gitignore
-          if [ "$TARGET_PRIVATE" = "false" ]; then
-            git -C "$WORK_DIR/target" add .github/workflows/repository-storage.yml
-          fi
-
-          if git -C "$WORK_DIR/target" diff --cached --quiet; then
-            echo "status=$STORAGE_MODE" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          git -C "$WORK_DIR/target" commit --quiet -m "Install repository storage policy"
-          git -C "$WORK_DIR/target" push --quiet origin "HEAD:$TARGET_BRANCH"
-          echo "status=$STORAGE_MODE" >> "$GITHUB_OUTPUT"
-
       - name: Copy standard Telegram secrets
         id: secrets
         if: steps.create.outputs.status == 'created' && steps.create.outputs.standard_secrets == 'true'
@@ -283,8 +228,6 @@ jobs:
           PROFILE: ${{ steps.create.outputs.profile }}
           STANDARD_SECRETS: ${{ steps.create.outputs.standard_secrets }}
           CAPSULE_OUTCOME: ${{ steps.capsule.outcome }}
-          STORAGE_STATUS: ${{ steps.storage.outputs.status }}
-          STORAGE_OUTCOME: ${{ steps.storage.outcome }}
           SECRETS_STATUS: ${{ steps.secrets.outputs.status }}
         shell: bash
         run: |
@@ -300,80 +243,6 @@ jobs:
                 BODY="$BODY"$'\n'"CONTEXT_CAPSULE: INSTALLED"
               else
                 BODY="$BODY"$'\n'"CONTEXT_CAPSULE: FAILED"
-              fi
-
-              if [ "$STORAGE_OUTCOME" = "success" ]; then
-                BODY="$BODY"
-                BODY="$BODY"$'\n'"STANDARD_SECRETS: SKIPPED_BY_REQUEST"
-              else
-                case "$SECRETS_STATUS" in
-                  synced)
-                    BODY="$BODY"$'\n'"STANDARD_SECRETS: SYNCED"
-                    ;;
-                  not_configured)
-                    BODY="$BODY"$'\n'"STANDARD_SECRETS: NOT_CONFIGURED_IN_FACTORY"
-                    ;;
-                  failed)
-                    BODY="$BODY"$'\n'"STANDARD_SECRETS: SYNC_FAILED"
-                    ;;
-                  *)
-                    BODY="$BODY"$'\n'"STANDARD_SECRETS: UNKNOWN"
-                    ;;
-                esac
-              fi
-              ;;
-            secret_missing)
-              BODY="FAILED: REPO_FACTORY_TOKEN is not configured."
-              ;;
-            invalid)
-              BODY="FAILED: $MESSAGE"
-              ;;
-            *)
-              BODY="FAILED: $MESSAGE"
-              ;;
-          esac
-
-          gh api \
-            --method POST \
-            "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" \
-            -f body="$BODY"
-\n'"REPOSITORY_STORAGE: ${STORAGE_STATUS:-INSTALLED}"
-              else
-                BODY="$BODY"
-                BODY="$BODY"$'\n'"STANDARD_SECRETS: SKIPPED_BY_REQUEST"
-              else
-                case "$SECRETS_STATUS" in
-                  synced)
-                    BODY="$BODY"$'\n'"STANDARD_SECRETS: SYNCED"
-                    ;;
-                  not_configured)
-                    BODY="$BODY"$'\n'"STANDARD_SECRETS: NOT_CONFIGURED_IN_FACTORY"
-                    ;;
-                  failed)
-                    BODY="$BODY"$'\n'"STANDARD_SECRETS: SYNC_FAILED"
-                    ;;
-                  *)
-                    BODY="$BODY"$'\n'"STANDARD_SECRETS: UNKNOWN"
-                    ;;
-                esac
-              fi
-              ;;
-            secret_missing)
-              BODY="FAILED: REPO_FACTORY_TOKEN is not configured."
-              ;;
-            invalid)
-              BODY="FAILED: $MESSAGE"
-              ;;
-            *)
-              BODY="FAILED: $MESSAGE"
-              ;;
-          esac
-
-          gh api \
-            --method POST \
-            "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" \
-            -f body="$BODY"
-\n'"REPOSITORY_STORAGE: FAILED"
               fi
 
               if [ "$STANDARD_SECRETS" = "false" ]; then
