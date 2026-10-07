@@ -7,8 +7,8 @@
   },
   "service_agent_base": {
     "repository": "lvlaksim1/service-agent-base",
-    "commit": "2a03aaf14fdd79612acefe8c5ac22600e5d3b57b",
-    "verification": "Service Agent Base CI SUCCESS with execution-invariant installation and repair regression coverage"
+    "commit": "ce8106cb97c18e352bb87326563d8f04a5a1bfa3",
+    "verification": "Service Agent Base CI SUCCESS with install, repair, and recovery-pack execution-invariant regression coverage"
   },
   "policy": "All component sources are exact immutable commit SHAs; Project Manager installations receive separate Core/PM provenance and version coordinates; factory changes must pass component contract smoke.",
   "context_capsule_core": {
