@@ -2,13 +2,13 @@
   "schema_version": 2,
   "project_manager": {
     "repository": "lvlaksim1/context-capsule-project-manager",
-    "commit": "9d6a2f69d38d880c44ea59c9b3d31b406cc5bcf1",
-    "verification": "Project Manager CI after explicit component-version split: tests + compile + CLI + VALID + READY + recover SUCCESS"
+    "commit": "2912687b38e23dcd0b017f336c321a3ae7f39674",
+    "verification": "Project Manager CI SUCCESS after execution-invariant template update"
   },
   "service_agent_base": {
     "repository": "lvlaksim1/service-agent-base",
-    "commit": "c010bf8d93c5a3b7a35e3d45891f72df7488bf2f",
-    "verification": "Service Agent Base CI after explicit source provenance cleanup: unit tests + compile + CLI + install contract SUCCESS"
+    "commit": "d847a40c99d59291615e28260e60bbb72b14080d",
+    "verification": "Service Agent Base CI SUCCESS after execution-invariant template update"
   },
   "policy": "All component sources are exact immutable commit SHAs; Project Manager installations receive separate Core/PM provenance and version coordinates; factory changes must pass component contract smoke.",
   "context_capsule_core": {
