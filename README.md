@@ -98,14 +98,14 @@
 `--core-commit` больше не используется фабрикой.
 
 Версии компонентов также независимы: Context Capsule Core остаётся `v1.3.1`, а
-Project Manager — `v2.0.0-dev`. Новая PM-установка обязана записать обе версии явно в
-`.context/capsule.json`; историческое верхнеуровневое `version: 2.0.0-dev` считается
-deprecated alias именно версии Project Manager.
+Project Manager — `2.1.0`. Новая PM-установка обязана записать обе версии явно в
+`.context/capsule.json`; историческая версия `2.0.0-dev` остаётся поддерживаемой только для
+явной миграции уже установленных менеджеров.
 
 Таким образом, ни Project Manager, ни Service Agent Base больше не берутся из исторической ветки `context-capsule:v2-manager-runtime`.
 Каждый источник закрепляется точным immutable commit SHA в `components.lock.json`. Этот файл является единственным каноническим distribution lock; workflow читает repository/commit только из него.
 
-Изменение component pin считается допустимым только после успешной CI самого компонента и успешного `Component Contract Smoke` фабрики. Поле `profile` обязательно; профиль всегда задаётся явно.
+Изменение component pin считается допустимым только после успешной CI самого компонента и успешного `Component Contract Smoke` фабрики. Номер Project Manager в lock — строго три числа без приставок; фабрика сверяет номер, тег выпуска и точный коммит. Поле `profile` обязательно; профиль всегда задаётся явно.
 
 ## Миграция существующего Project Manager на split provenance
 
@@ -385,7 +385,7 @@ Telegram-related secrets нужны только для соответствую
 
 В lock schema v2 отдельно закрепляются:
 - Context Capsule Core — repository + exact immutable commit;
-- Project Manager — repository + exact immutable commit;
+- Project Manager — repository + stable numeric version + exact immutable commit;
 - Service Agent Base — repository + exact immutable commit.
 
 `Component Contract Smoke` проверяет существование всех трёх immutable SHA, выполняет временную установку Project Manager с раздельными provenance coordinates и валидирует оба агентских профиля без создания тестовых репозиториев.

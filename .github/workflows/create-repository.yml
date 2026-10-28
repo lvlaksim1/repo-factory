@@ -141,6 +141,7 @@ jobs:
           CONTEXT_CAPSULE_COMMIT="$(jq -r '.context_capsule_core.commit' "$LOCK_FILE")"
           PROJECT_MANAGER_REPO="$(jq -r '.project_manager.repository' "$LOCK_FILE")"
           PROJECT_MANAGER_COMMIT="$(jq -r '.project_manager.commit' "$LOCK_FILE")"
+          PROJECT_MANAGER_VERSION="$(jq -r '.project_manager.version' "$LOCK_FILE")"
           SERVICE_AGENT_BASE_REPO="$(jq -r '.service_agent_base.repository' "$LOCK_FILE")"
           SERVICE_AGENT_BASE_COMMIT="$(jq -r '.service_agent_base.commit' "$LOCK_FILE")"
 
@@ -171,6 +172,7 @@ jobs:
             SOURCE_COMMIT="$PROJECT_MANAGER_COMMIT"
             git clone --quiet "https://github.com/$PROJECT_MANAGER_REPO.git" "$WORK_DIR/project-manager"
             git -C "$WORK_DIR/project-manager" checkout --quiet --detach "$SOURCE_COMMIT"
+            test "$(cat "$WORK_DIR/project-manager/VERSION")" = "$PROJECT_MANAGER_VERSION"
 
             python "$WORK_DIR/project-manager/installer/pmctl.py" install \
               --target "$WORK_DIR/target" \
@@ -178,7 +180,7 @@ jobs:
               --branch "$TARGET_BRANCH" \
               --project-manager-commit "$SOURCE_COMMIT" \
               --context-capsule-commit "$CONTEXT_CAPSULE_COMMIT"
-            COMMIT_MESSAGE="Install Project Manager v2"
+            COMMIT_MESSAGE="Install Project Manager $PROJECT_MANAGER_VERSION"
           fi
 
           git -C "$WORK_DIR/target" config user.name "repo-factory"

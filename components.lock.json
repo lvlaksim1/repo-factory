@@ -2,8 +2,9 @@
   "schema_version": 2,
   "project_manager": {
     "repository": "lvlaksim1/context-capsule-project-manager",
-    "commit": "2912687b38e23dcd0b017f336c321a3ae7f39674",
-    "verification": "Project Manager CI SUCCESS after execution-invariant template update"
+    "commit": "6c8160365198206409747c145fd1dabaaf91f4e7",
+    "verification": "Project Manager CI SUCCESS (run 40671790118); stable numeric release 2.1.0 on exact tagged commit",
+    "version": "2.1.0"
   },
   "service_agent_base": {
     "repository": "lvlaksim1/service-agent-base",
