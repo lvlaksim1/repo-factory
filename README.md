@@ -44,7 +44,7 @@
 - `role`
 - `specialization`
 
-Фабрика выполняет clean install из отдельного закреплённого источника `lvlaksim1/service-agent-base`.
+Фабрика выполняет чистую установку из закреплённого `lvlaksim1/service-agent-base`. Текущая стабильная версия — `1.1.0`, без приставок и суффиксов. Базовый компонент добавляет необязательный проверяемый журнал событий, реестр обязательств и рабочий индекс; новые агенты не получают автоматически полномочия над сторонними проектами.
 
 ### Инфраструктурный репозиторий без агента
 
@@ -386,6 +386,6 @@ Telegram-related secrets нужны только для соответствую
 В lock schema v2 отдельно закрепляются:
 - Context Capsule Core — repository + exact immutable commit;
 - Project Manager — repository + stable numeric version + exact immutable commit;
-- Service Agent Base — repository + exact immutable commit.
+- Service Agent Base — repository + stable numeric version + exact immutable commit.
 
 `Component Contract Smoke` проверяет существование всех трёх immutable SHA, выполняет временную установку Project Manager с раздельными provenance coordinates и валидирует оба агентских профиля без создания тестовых репозиториев.

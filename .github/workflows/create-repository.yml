@@ -144,6 +144,7 @@ jobs:
           PROJECT_MANAGER_VERSION="$(jq -r '.project_manager.version' "$LOCK_FILE")"
           SERVICE_AGENT_BASE_REPO="$(jq -r '.service_agent_base.repository' "$LOCK_FILE")"
           SERVICE_AGENT_BASE_COMMIT="$(jq -r '.service_agent_base.commit' "$LOCK_FILE")"
+          SERVICE_AGENT_BASE_VERSION="$(jq -r '.service_agent_base.version' "$LOCK_FILE")"
 
           gh auth setup-git >/dev/null
           gh repo clone "$TARGET_REPO" "$WORK_DIR/target" -- --depth=1 >/dev/null
@@ -154,6 +155,7 @@ jobs:
             SOURCE_COMMIT="$SERVICE_AGENT_BASE_COMMIT"
             git clone --quiet "https://github.com/$SERVICE_AGENT_BASE_REPO.git" "$WORK_DIR/service-agent-base"
             git -C "$WORK_DIR/service-agent-base" checkout --quiet --detach "$SOURCE_COMMIT"
+            test "$(cat "$WORK_DIR/service-agent-base/SERVICE_AGENT_BASE_VERSION")" = "$SERVICE_AGENT_BASE_VERSION"
 
             AGENT_ID="$(jq -r '.agent_id' "$WORK_DIR/request.json")"
             ROLE="$(jq -r '.role' "$WORK_DIR/request.json")"
@@ -167,7 +169,7 @@ jobs:
               --role "$ROLE" \
               --specialization "$SPECIALIZATION" \
               --source-commit "$SOURCE_COMMIT"
-            COMMIT_MESSAGE="Install Service Agent Base"
+            COMMIT_MESSAGE="Install Service Agent Base $SERVICE_AGENT_BASE_VERSION"
           else
             SOURCE_COMMIT="$PROJECT_MANAGER_COMMIT"
             git clone --quiet "https://github.com/$PROJECT_MANAGER_REPO.git" "$WORK_DIR/project-manager"

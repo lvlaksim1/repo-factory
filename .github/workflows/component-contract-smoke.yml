@@ -48,10 +48,12 @@ jobs:
           PM_SHA="$(jq -r '.project_manager.commit' components.lock.json)"
           PM_VERSION="$(jq -r '.project_manager.version' components.lock.json)"
           SA_SHA="$(jq -r '.service_agent_base.commit' components.lock.json)"
+          SA_VERSION="$(jq -r '.service_agent_base.version' components.lock.json)"
           [[ "$CORE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$PM_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$PM_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
           [[ "$SA_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SA_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
 
       - name: Project Manager install contract
         shell: bash
@@ -266,9 +268,12 @@ jobs:
           set -euo pipefail
           SA_REPO="$(jq -r '.service_agent_base.repository' components.lock.json)"
           SA_SHA="$(jq -r '.service_agent_base.commit' components.lock.json)"
+          SA_VERSION="$(jq -r '.service_agent_base.version' components.lock.json)"
 
           git clone --quiet "https://github.com/$SA_REPO.git" /tmp/service-agent-base
           git -C /tmp/service-agent-base checkout --quiet --detach "$SA_SHA"
+          test "$(cat /tmp/service-agent-base/SERVICE_AGENT_BASE_VERSION)" = "$SA_VERSION"
+          test "$(git -C /tmp/service-agent-base rev-parse "refs/tags/$SA_VERSION^{commit}")" = "$SA_SHA"
 
           git init -q -b main /tmp/service-target
           printf '# Service smoke target\n' > /tmp/service-target/README.md
@@ -283,6 +288,10 @@ jobs:
             --source-commit "$SA_SHA"
 
           python /tmp/service-agent-base/installer/servicectl.py validate --target /tmp/service-target
+          python /tmp/service-agent-base/installer/servicectl.py durable-audit --target /tmp/service-target
+          python /tmp/service-agent-base/installer/servicectl.py durable-plan --target /tmp/service-target --init
+          jq -e --arg ver "$SA_VERSION" '.profile_version == $ver and .version == "2.0.0"' /tmp/service-target/.context/capsule.json >/dev/null
+          jq -e --arg ver "$SA_VERSION" '.profile_version == $ver' /tmp/service-target/.context/manifest.json >/dev/null
           test -f /tmp/service-target/.context/service-agent/CONTRACT.md
           jq -e --arg sha "$SA_SHA" '
             .source == "lvlaksim1/service-agent-base"
