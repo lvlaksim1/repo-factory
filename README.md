@@ -389,3 +389,9 @@ Telegram-related secrets нужны только для соответствую
 - Service Agent Base — repository + stable numeric version + exact immutable commit.
 
 `Component Contract Smoke` проверяет существование всех трёх immutable SHA, выполняет временную установку Project Manager с раздельными provenance coordinates и валидирует оба агентских профиля без создания тестовых репозиториев.
+
+## Engineering Quality Profile (31.10.2026)
+
+Каждый новый репозиторий с профилем `project-manager` при штатном создании через фабрику получает локальный `scripts/quality_runner.py`, `scripts/architecture_explorer.py`, `quality/standard.json` и `quality/ENGINEERING-STANDARD.md`. Новый проект не считается проверенным, пока менеджер не настроит собственные тесты: пустой набор возвращает `NOT_CONFIGURED`.
+
+Для существующих проектов — неразрушающая установка через `python scripts/install_engineering_quality.py --target ... --project owner/repo`. Уже изменённые целевые файлы никогда не перезаписываются автоматически. Политика и проверки: `policy/engineering-quality/` и `scripts/test_engineering_quality.py`. Локальные отчёты и HTML-карты игнорируются Git. Фабрика не устанавливает приложение и не запускает тесты в реальном интерфейсе.

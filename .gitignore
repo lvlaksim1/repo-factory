@@ -9,3 +9,7 @@
 *.rar
 *.dll
 *.pdb
+
+# Python quality tooling caches
+**/__pycache__/
+*.pyc

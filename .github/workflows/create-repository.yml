@@ -183,6 +183,10 @@ jobs:
               --project-manager-commit "$SOURCE_COMMIT" \
               --context-capsule-commit "$CONTEXT_CAPSULE_COMMIT"
             COMMIT_MESSAGE="Install Project Manager $PROJECT_MANAGER_VERSION"
+            # Every new PM project receives a local quality profile; empty checks are NOT_CONFIGURED.
+            python "$GITHUB_WORKSPACE/scripts/install_engineering_quality.py" \
+              --target "$WORK_DIR/target" \
+              --project "$TARGET_REPO"
           fi
 
           git -C "$WORK_DIR/target" config user.name "repo-factory"
