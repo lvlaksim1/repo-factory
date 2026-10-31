@@ -25,6 +25,7 @@ def install(target: Path, project: str, dry_run=False):
     }
     files = {
         target / "scripts" / "quality_runner.py": (SOURCE / "quality_runner.py").read_bytes(),
+        target / "scripts" / "quality_source_sanity.py": (SOURCE / "quality_source_sanity.py").read_bytes(),
         target / "scripts" / "architecture_explorer.py": (SOURCE / "architecture_explorer.py").read_bytes(),
         target / "quality" / "ENGINEERING-STANDARD.md": (SOURCE / "ENGINEERING-STANDARD.md").read_bytes(),
         target / "quality" / "standard.json": (json.dumps(config, ensure_ascii=False, indent=2) + "\n").encode("utf-8"),

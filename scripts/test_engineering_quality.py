@@ -21,9 +21,9 @@ with tempfile.TemporaryDirectory(prefix="factory-quality-") as tmp:
     target.mkdir()
     subprocess.run(["git", "init", "-q", str(target)], check=True)
     plan = installer.install(target, "lvlaksim1/example", dry_run=True)
-    check(len(plan) == 5 and not (target / "quality").exists(), "dry run changed files")
+    check(len(plan) == 6 and not (target / "quality").exists(), "dry run changed files")
     writes = installer.install(target, "lvlaksim1/example")
-    check(len(writes) == 5, "installation count")
+    check(len(writes) == 6, "installation count")
     check(all(x.startswith("UNCHANGED") for x in installer.install(target, "lvlaksim1/example")), "idempotency")
     architecture = target / "scripts" / "architecture_explorer.py"
     check(architecture.exists(), "architecture analyzer not installed")
@@ -55,6 +55,11 @@ with tempfile.TemporaryDirectory(prefix="factory-quality-") as tmp:
     check(broken.returncode == 1 and "UNRESOLVED=1" in broken.stdout, "missing project not detected")
     a.write_text('<Project><ItemGroup><ProjectReference Include="../B/B.csproj" /></ItemGroup></Project>',
                  encoding="utf-8")
+    subprocess.run(["git", "-C", str(target), "add", "src"], check=True)
+    sanity = target / "scripts" / "quality_source_sanity.py"
+    check(sanity.exists(), "source sanity script absent")
+    sanity_result = subprocess.run([sys.executable,str(sanity)], cwd=target, capture_output=True, text=True)
+    check(sanity_result.returncode == 0 and "SOURCE_SANITY_PASS" in sanity_result.stdout, "syntax check failed")
     runner = target / "scripts" / "quality_runner.py"
     p = subprocess.run([sys.executable, str(runner), "--profile", "quick"],
                        cwd=target, capture_output=True, text=True)
